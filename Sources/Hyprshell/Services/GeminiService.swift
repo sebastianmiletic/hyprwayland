@@ -59,7 +59,7 @@ final class GeminiService: ObservableObject {
 }
 
 private final class GeminiKeychain {
-    private let service = "com.sebastianmiletic.waycode.gemini"
+    private let service = "com.sebastianmiletic.hyprshell.gemini"
     private let account = "default"
     func read() -> String? {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]

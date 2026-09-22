@@ -13,9 +13,9 @@ struct ThemePalette: Codable, Equatable, Identifiable {
     var success: String
 
     static let sebastian = ThemePalette(id: "sebastian-ii", name: "Sebastian II", source: "github.com/sebastianmiletic/hyprland-dotfiles", background: "#141313", surface: "#2D2A2F", foreground: "#E6E1E1", muted: "#948F94", accent: "#CBC4CB", success: "#B5CCBA")
-    static let graphite = ThemePalette(id: "graphite", name: "Graphite", source: "Waycode", background: "#17191C", surface: "#282C31", foreground: "#F0F1F2", muted: "#969CA5", accent: "#F0A35B", success: "#7DBD8B")
-    static let paper = ThemePalette(id: "paper", name: "Paper", source: "Waycode", background: "#F1EFEA", surface: "#DDD9D0", foreground: "#242321", muted: "#6D6962", accent: "#B84D3C", success: "#46745A")
-    static let trueBlack = ThemePalette(id: "true-black", name: "True Black", source: "Waycode", background: "#000000", surface: "#151515", foreground: "#F2F2F2", muted: "#A0A0A0", accent: "#D0D0D0", success: "#8CCF9B")
+    static let graphite = ThemePalette(id: "graphite", name: "Graphite", source: "Hyprshell", background: "#17191C", surface: "#282C31", foreground: "#F0F1F2", muted: "#969CA5", accent: "#F0A35B", success: "#7DBD8B")
+    static let paper = ThemePalette(id: "paper", name: "Paper", source: "Hyprshell", background: "#F1EFEA", surface: "#DDD9D0", foreground: "#242321", muted: "#6D6962", accent: "#B84D3C", success: "#46745A")
+    static let trueBlack = ThemePalette(id: "true-black", name: "True Black", source: "Hyprshell", background: "#000000", surface: "#151515", foreground: "#F2F2F2", muted: "#A0A0A0", accent: "#D0D0D0", success: "#8CCF9B")
 }
 
 enum BarPosition: String, Codable, CaseIterable { case top = "Top", bottom = "Bottom" }
@@ -67,7 +67,7 @@ enum WidgetKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 enum WidgetClickAction: String, Codable, CaseIterable, Identifiable {
-    case none = "Nothing", leftSidebar = "Toggle left sidebar", rightSidebar = "Toggle right sidebar", settings = "Open Waycode", wallpapers = "Wallpaper gallery", randomWallpaper = "Random wallpaper", shell = "Run shell command"
+    case none = "Nothing", leftSidebar = "Toggle left sidebar", rightSidebar = "Toggle right sidebar", settings = "Open Hyprshell", wallpapers = "Wallpaper gallery", randomWallpaper = "Random wallpaper", shell = "Run shell command"
     var id: String { rawValue }
 }
 
@@ -130,7 +130,7 @@ struct WidgetConfiguration: Codable, Equatable, Identifiable {
         .init(kind: .volume, name: "Volume", placement: .trailing, icon: "speaker.wave.2", clickAction: .rightSidebar),
         .init(kind: .battery, name: "Battery", placement: .trailing, icon: "battery.75percent", clickAction: .rightSidebar),
         .init(kind: .rightSidebar, name: "Control center", placement: .trailing, icon: "switch.2", showLabel: false, style: .pill, clickAction: .rightSidebar),
-        .init(kind: .settings, name: "Waycode settings", placement: .trailing, icon: "gearshape.fill", showLabel: false, clickAction: .settings)
+        .init(kind: .settings, name: "Hyprshell settings", placement: .trailing, icon: "gearshape.fill", showLabel: false, clickAction: .settings)
     ]
 }
 
@@ -228,11 +228,11 @@ extension BarConfiguration {
             for index in widgets.indices { widgets[index].fontSize = 10.5; widgets[index].horizontalPadding = 5; widgets[index].cornerRadius = 9 }
         case .catppuccin:
             height = 42; horizontalInset = 14; outerInset = 6; cornerRadius = 18; floating = true; splitAroundNotch = true; blurEnabled = false; opacity = 0.88
-            palette = ThemePalette(id: "catppuccin", name: "Catppuccin Mocha", source: "Waycode", background: "#1E1E2E", surface: "#313244", foreground: "#CDD6F4", muted: "#A6ADC8", accent: "#CBA6F7", success: "#A6E3A1")
+            palette = ThemePalette(id: "catppuccin", name: "Catppuccin Mocha", source: "Hyprshell", background: "#1E1E2E", surface: "#313244", foreground: "#CDD6F4", muted: "#A6ADC8", accent: "#CBA6F7", success: "#A6E3A1")
             for index in widgets.indices { widgets[index].style = [.uptime, .workspaces, .rightSidebar].contains(widgets[index].kind) ? .pill : .plain }
         case .nord:
             height = 40; horizontalInset = 16; outerInset = 6; cornerRadius = 14; floating = true; splitAroundNotch = true; showBackground = false; blurEnabled = false; opacity = 1
-            palette = ThemePalette(id: "nord", name: "Nord", source: "Waycode", background: "#2E3440", surface: "#3B4252", foreground: "#ECEFF4", muted: "#D8DEE9", accent: "#88C0D0", success: "#A3BE8C")
+            palette = ThemePalette(id: "nord", name: "Nord", source: "Hyprshell", background: "#2E3440", surface: "#3B4252", foreground: "#ECEFF4", muted: "#D8DEE9", accent: "#88C0D0", success: "#A3BE8C")
             for index in widgets.indices { widgets[index].style = .outlined }
         case .pillOnly:
             height = 40; horizontalInset = 14; outerInset = 6; floating = true; splitAroundNotch = true; showBackground = false; blurEnabled = false; itemSpacing = 7
@@ -245,15 +245,15 @@ extension BarConfiguration {
             }
         case .monochrome:
             height = 38; horizontalInset = 18; outerInset = 5; cornerRadius = 10; opacity = 0.9; blurEnabled = false
-            palette = ThemePalette(id: "monochrome", name: "Monochrome", source: "Waycode", background: "#101010", surface: "#292929", foreground: "#F0F0F0", muted: "#A0A0A0", accent: "#D4D4D4", success: "#D4D4D4")
+            palette = ThemePalette(id: "monochrome", name: "Monochrome", source: "Hyprshell", background: "#101010", surface: "#292929", foreground: "#F0F0F0", muted: "#A0A0A0", accent: "#D4D4D4", success: "#D4D4D4")
             for index in widgets.indices { widgets[index].style = .plain }
         case .rose:
             height = 44; horizontalInset = 16; outerInset = 7; cornerRadius = 20; opacity = 0.92; blurEnabled = false
-            palette = ThemePalette(id: "rose", name: "Rose Garden", source: "Waycode", background: "#271C21", surface: "#49323D", foreground: "#F4E7EC", muted: "#C6A8B4", accent: "#E49AB0", success: "#AFC7A0")
+            palette = ThemePalette(id: "rose", name: "Rose Garden", source: "Hyprshell", background: "#271C21", surface: "#49323D", foreground: "#F4E7EC", muted: "#C6A8B4", accent: "#E49AB0", success: "#AFC7A0")
             for index in widgets.indices { widgets[index].style = [.workspaces, .clock, .rightSidebar].contains(widgets[index].kind) ? .pill : .plain }
         case .solarized:
             height = 40; horizontalInset = 12; outerInset = 5; cornerRadius = 12; opacity = 0.94; blurEnabled = false
-            palette = ThemePalette(id: "solarized", name: "Solarized Dark", source: "Waycode", background: "#002B36", surface: "#073642", foreground: "#EEE8D5", muted: "#93A1A1", accent: "#2AA198", success: "#859900")
+            palette = ThemePalette(id: "solarized", name: "Solarized Dark", source: "Hyprshell", background: "#002B36", surface: "#073642", foreground: "#EEE8D5", muted: "#93A1A1", accent: "#2AA198", success: "#859900")
             for index in widgets.indices { widgets[index].style = .pill }
         case .outline:
             height = 40; horizontalInset = 16; outerInset = 6; floating = true; splitAroundNotch = true; showBackground = false; blurEnabled = false; itemSpacing = 6
@@ -279,7 +279,7 @@ struct ShortcutConfiguration: Codable, Equatable, Identifiable {
     var display: String { (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "") + key.uppercased() }
 }
 
-struct WaycodeConfiguration: Codable, Equatable {
+struct HyprshellConfiguration: Codable, Equatable {
     var bar = BarConfiguration()
     var shortcuts = [ShortcutConfiguration(action: .leftSidebar, key: "a"), ShortcutConfiguration(action: .rightSidebar, key: "n"), ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
     var wallpaperFolders = [NSHomeDirectory() + "/Pictures"]

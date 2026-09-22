@@ -269,7 +269,7 @@ private struct WidgetView: View {
         Button {
             guard actionEnabled else { return }
             if detail == "Battery" { controls.setLowPowerMode(!controls.lowPowerMode) }
-            else if detail.isEmpty { NotificationCenter.default.post(name: .waycodeToggleRightSidebar, object: nil) }
+            else if detail.isEmpty { NotificationCenter.default.post(name: .hyprshellToggleRightSidebar, object: nil) }
             else { model.statusPopoverDetail = detail; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; if detail == "Wi-Fi" { controls.requestWiFiAccessAndScan() }; if detail == "Sound" { controls.refreshAudioDevices() } }
         } label: {
             Image(systemName: detail == "Battery" && controls.batteryCharging ? "battery.100percent.bolt" : icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24)
@@ -285,13 +285,13 @@ private struct WidgetView: View {
     private func performAction() {
         switch widget.clickAction {
         case .none: break
-        case .leftSidebar: NotificationCenter.default.post(name: .waycodeToggleLeftSidebar, object: nil)
+        case .leftSidebar: NotificationCenter.default.post(name: .hyprshellToggleLeftSidebar, object: nil)
         case .rightSidebar:
             let detail: String
             switch widget.kind { case .wifi: detail = "Wi-Fi"; case .volume: detail = "Sound"; case .battery: detail = "Battery"; default: detail = "" }
-            NotificationCenter.default.post(name: .waycodeToggleRightSidebar, object: detail)
-        case .settings: NotificationCenter.default.post(name: .waycodeShowSettings, object: nil)
-        case .wallpapers: NotificationCenter.default.post(name: .waycodeShowWallpapers, object: nil)
+            NotificationCenter.default.post(name: .hyprshellToggleRightSidebar, object: detail)
+        case .settings: NotificationCenter.default.post(name: .hyprshellShowSettings, object: nil)
+        case .wallpapers: NotificationCenter.default.post(name: .hyprshellShowWallpapers, object: nil)
         case .randomWallpaper: model.randomWallpaper()
         case .shell: ScriptWidgetRunner.runAction(widget.clickCommand)
         }
@@ -351,7 +351,7 @@ private struct WallpaperBarPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if choices.isEmpty {
-                VStack(spacing: 8) { Image(systemName: "photo.badge.plus").font(.title); Text("Add wallpaper folders in Waycode Settings").font(.caption) }.frame(maxWidth: .infinity, minHeight: 120).foregroundStyle(Color(hex: palette.muted))
+                VStack(spacing: 8) { Image(systemName: "photo.badge.plus").font(.title); Text("Add wallpaper folders in Hyprshell Settings").font(.caption) }.frame(maxWidth: .infinity, minHeight: 120).foregroundStyle(Color(hex: palette.muted))
             } else {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {

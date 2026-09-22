@@ -10,7 +10,7 @@ struct SettingsView: View {
                 HStack(spacing: 9) {
                     ZStack { RoundedRectangle(cornerRadius: 8).fill(Color(hex: model.configuration.bar.palette.accent)); Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundStyle(Color(hex: model.configuration.bar.palette.background)) }
                         .frame(width: 30, height: 30)
-                    Text("Waycode").font(.system(size: 19, weight: .bold, design: .rounded))
+                    Text("Hyprshell").font(.system(size: 19, weight: .bold, design: .rounded))
                 }.padding(.horizontal, 12).padding(.bottom, 12)
                 ForEach(AppSection.allCases) { section in
                     Button { model.selectedSection = section } label: {
@@ -399,7 +399,7 @@ struct TilingSettingsView: View {
             Text("One bundle identifier per line. Matching applications remain floating.").font(.caption).foregroundStyle(.secondary)
             TextEditor(text: Binding(get: { model.configuration.tiling.ignoredBundleIDs.joined(separator: "\n") }, set: { model.configuration.tiling.ignoredBundleIDs = $0.components(separatedBy: .newlines).filter { !$0.isEmpty } })).font(.system(.body, design: .monospaced)).frame(minHeight: 110)
         }
-        Text("Hyprland dwindle recursively splits the remaining leaf along its longest axis. Waycode manages only visible, resizable standard windows on the current Mission Control desktop; dialogs, sheets, fullscreen windows, other Spaces, and excluded apps remain floating. macOS Accessibility permission is required.").font(.caption).foregroundStyle(.secondary)
+        Text("Hyprland dwindle recursively splits the remaining leaf along its longest axis. Hyprshell manages only visible, resizable standard windows on the current Mission Control desktop; dialogs, sheets, fullscreen windows, other Spaces, and excluded apps remain floating. macOS Accessibility permission is required.").font(.caption).foregroundStyle(.secondary)
     }
 }
 

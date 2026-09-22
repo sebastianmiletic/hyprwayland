@@ -8,7 +8,7 @@ product
 macOS power users who like Hyprland and Linux desktop customization but need a native, dependable macOS tool. They want to shape a persistent desktop bar, shortcuts, colors, modules, and wallpapers without maintaining shell scripts.
 
 ## Product Purpose
-Waycode renders its own native multi-display top bar, provides Hyprland-style window tiling, and offers one place to customize appearance, modules, global controls, named bar configurations, themes, and wallpapers. Success means a user can install the app, choose or build a bar visually, map Option+W to the wallpaper gallery, and keep the setup working after relaunch without installing SketchyBar or running a web service.
+Hyprshell renders its own native multi-display top bar, provides Hyprland-style window tiling, and offers one place to customize appearance, modules, global controls, named bar configurations, themes, and wallpapers. Success means a user can install the app, choose or build a bar visually, map Option+W to the wallpaper gallery, and keep the setup working after relaunch without installing SketchyBar or running a web service.
 
 ## Brand Personality
 Technical, tactile, and composed. It combines the density and directness of a well-made Linux desktop with the reliability and legibility of a native macOS utility.

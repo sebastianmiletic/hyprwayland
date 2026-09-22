@@ -7,7 +7,7 @@ import CoreWLAN
 final class AppModel: ObservableObject {
     static let shared = AppModel()
 
-    @Published var configuration: WaycodeConfiguration
+    @Published var configuration: HyprshellConfiguration
     @Published var wallpapers: [URL] = []
     @Published var selectedSection: AppSection = .bar
     @Published var barProfileName = "My bar"
@@ -47,14 +47,25 @@ final class AppModel: ObservableObject {
 
     private init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Waycode", isDirectory: true)
+            .appendingPathComponent("Hyprshell", isDirectory: true)
         try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         configURL = support.appendingPathComponent("config.json")
-        if let data = try? Data(contentsOf: configURL), let decoded = try? JSONDecoder().decode(WaycodeConfiguration.self, from: data) {
+        if let data = try? Data(contentsOf: configURL), let decoded = try? JSONDecoder().decode(HyprshellConfiguration.self, from: data) {
             configuration = decoded
         } else {
-            configuration = WaycodeConfiguration()
+            configuration = HyprshellConfiguration()
         }
+        // Carry paths forward from the previous application-support directory.
+        let legacyName = "Way" + "code"
+        let legacyPrefix = support.deletingLastPathComponent().appendingPathComponent(legacyName).path + "/"
+        let currentPrefix = support.path + "/"
+        func migratedPath(_ path: String) -> String { path.hasPrefix(legacyPrefix) ? currentPrefix + path.dropFirst(legacyPrefix.count) : path }
+        configuration.wallpaperFolders = configuration.wallpaperFolders.map(migratedPath)
+        configuration.wallpaperFiles = configuration.wallpaperFiles.map(migratedPath)
+        configuration.favoriteWallpapers = configuration.favoriteWallpapers.map(migratedPath)
+        configuration.currentWallpaper = migratedPath(configuration.currentWallpaper)
+        let archive = support.appendingPathComponent("Wallpapers/TerminalArchive", isDirectory: true).path
+        if FileManager.default.fileExists(atPath: archive), !configuration.wallpaperFolders.contains(archive) { configuration.wallpaperFolders.append(archive) }
         if configuration.currentWallpaper.isEmpty, let screen = NSScreen.main, let current = NSWorkspace.shared.desktopImageURL(for: screen) { configuration.currentWallpaper = current.path }
         if configuration.sourcePresetVersion < 2 {
             configuration.bar.palette = .sebastian
@@ -162,7 +173,7 @@ final class AppModel: ObservableObject {
             } else { configuration.shortcuts.append(ShortcutConfiguration(action: action, key: key)) }
         }
         if !configuration.bar.widgets.contains(where: { $0.kind == .settings || $0.clickAction == .settings }) {
-            configuration.bar.widgets.append(WidgetConfiguration(kind: .settings, name: "Waycode settings", placement: .trailing, icon: "gearshape.fill", showLabel: false, clickAction: .settings))
+            configuration.bar.widgets.append(WidgetConfiguration(kind: .settings, name: "Hyprshell settings", placement: .trailing, icon: "gearshape.fill", showLabel: false, clickAction: .settings))
         }
         $configuration.dropFirst().debounce(for: .milliseconds(180), scheduler: RunLoop.main).sink { [weak self] value in
             self?.save(value)
@@ -176,7 +187,7 @@ final class AppModel: ObservableObject {
         save()
     }
 
-    func save(_ value: WaycodeConfiguration? = nil) {
+    func save(_ value: HyprshellConfiguration? = nil) {
         do {
             let data = try JSONEncoder.pretty.encode(value ?? configuration)
             try data.write(to: configURL, options: .atomic)
@@ -184,7 +195,7 @@ final class AppModel: ObservableObject {
         } catch { statusMessage = "Could not save: \(error.localizedDescription)" }
     }
 
-    func reset() { configuration = WaycodeConfiguration() }
+    func reset() { configuration = HyprshellConfiguration() }
 
     func barConfiguration(for style: BuiltInBarStyle) -> BarConfiguration {
         var bar = configuration.bar
@@ -205,7 +216,7 @@ final class AppModel: ObservableObject {
 
     func exportProfile() {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "Waycode-profile.json"
+        panel.nameFieldStringValue = "Hyprshell-profile.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
@@ -219,7 +230,7 @@ final class AppModel: ObservableObject {
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            configuration = try JSONDecoder().decode(WaycodeConfiguration.self, from: Data(contentsOf: url))
+            configuration = try JSONDecoder().decode(HyprshellConfiguration.self, from: Data(contentsOf: url))
             statusMessage = "Profile imported"
         } catch { statusMessage = "Invalid profile: \(error.localizedDescription)" }
     }
@@ -273,33 +284,29 @@ final class AppModel: ObservableObject {
 
     func setWallpaper(_ url: URL, allDesktops: Bool = true) {
         wallpaperTransition.begin(from: configuration.currentWallpaper)
-        var failures = 0
         let options: [NSWorkspace.DesktopImageOptionKey: Any] = [.imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue, .allowClipping: true]
-        let targetScreens = allDesktops ? NSScreen.screens : [NSScreen.main].compactMap { $0 }
-        for screen in targetScreens {
+        var failures = 0
+        let apply: (NSScreen) -> Void = { screen in
             do { try NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: options) }
             catch { failures += 1 }
         }
-        if allDesktops {
-            // NSWorkspace handles visible desktops; System Events extends the
-            // change to every Mission Control desktop.
-            let escaped = url.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-            let script = "tell application \"System Events\" to tell every desktop to set picture to \"\(escaped)\""
-            var scriptError: NSDictionary?; NSAppleScript(source: script)?.executeAndReturnError(&scriptError)
-        }
-        if failures == 0 {
-            configuration.currentWallpaper = url.path
-            statusMessage = allDesktops ? "Wallpaper changed on every desktop" : "Wallpaper changed on this desktop"
-            if configuration.adaptColorsToWallpaper {
-                let base = configuration.bar.palette
-                DispatchQueue.global(qos: .userInitiated).async {
-                    guard let palette = WallpaperColorExtractor.palette(from: url, basedOn: base) else { return }
-                    DispatchQueue.main.async { self.configuration.bar.palette = palette }
+        let finish = {
+            if failures == 0 {
+                self.configuration.currentWallpaper = url.path
+                self.statusMessage = allDesktops ? "Wallpaper changed on every desktop" : "Wallpaper changed on this desktop"
+                if self.configuration.adaptColorsToWallpaper {
+                    let base = self.configuration.bar.palette
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        guard let palette = WallpaperColorExtractor.palette(from: url, basedOn: base) else { return }
+                        DispatchQueue.main.async { self.configuration.bar.palette = palette }
+                    }
                 }
-            }
-            NotificationCenter.default.post(name: .waycodeWallpaperChanged, object: url)
-        } else { statusMessage = "Wallpaper failed on \(failures) display(s)" }
-        wallpaperTransition.reveal()
+                NotificationCenter.default.post(name: .hyprshellWallpaperChanged, object: url)
+            } else { self.statusMessage = "Wallpaper failed on \(failures) desktop(s)" }
+            self.wallpaperTransition.reveal()
+        }
+        if allDesktops { workspaces.visitEveryDesktop(apply, completion: finish) }
+        else { if let screen = NSScreen.main { apply(screen) }; finish() }
     }
 
     func installWallpaperArchive() {
@@ -315,7 +322,7 @@ final class AppModel: ObservableObject {
             guard let temporary, error == nil else {
                 DispatchQueue.main.async { self.installingWallpaperArchive = false; self.wallpaperArchiveStatus = "Archive download failed. Check your connection." }; return
             }
-            let staging = FileManager.default.temporaryDirectory.appendingPathComponent("WaycodeWallpapers-\(UUID().uuidString)", isDirectory: true)
+            let staging = FileManager.default.temporaryDirectory.appendingPathComponent("HyprshellWallpapers-\(UUID().uuidString)", isDirectory: true)
             do {
                 try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
                 let process = Process(); process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto"); process.arguments = ["-x", "-k", temporary.path, staging.path]

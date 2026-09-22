@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Waycode",
+    name: "Hyprshell",
     platforms: [.macOS(.v13)],
-    products: [.executable(name: "Waycode", targets: ["Waycode"])],
+    products: [.executable(name: "Hyprshell", targets: ["Hyprshell"])],
     targets: [
         .executableTarget(
-            name: "Waycode",
+            name: "Hyprshell",
             resources: [.process("Resources")],
             linkerSettings: [
                 .linkedFramework("AppKit"),

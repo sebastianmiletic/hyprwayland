@@ -1,6 +1,8 @@
-# Waycode
+# Hyprshell
 
-Waycode is a native macOS desktop bar and customization app inspired by Hyprland setups. It runs as a menu-bar utility without a Dock icon, renders its own notch-aware multi-display bar, and includes a live widget editor, global shortcut mapping, native wallpaper gallery, JSON profiles, shell widgets, and a port of the Sebastian II Quickshell bar from `sebastianmiletic/hyprland-dotfiles`.
+Hyprshell is a native macOS desktop bar and customization app inspired by Hyprland setups. It runs as a menu-bar utility without a Dock icon, renders its own notch-aware multi-display bar, and includes a live widget editor, global shortcut mapping, native wallpaper gallery, JSON profiles, shell widgets, and a port of the Sebastian II Quickshell bar from `sebastianmiletic/hyprland-dotfiles`.
+
+Repository: <https://github.com/sebastianmiletic/hyprshell>
 
 ## Requirements
 
@@ -11,49 +13,49 @@ Waycode is a native macOS desktop bar and customization app inspired by Hyprland
 
 ```bash
 swift build
-swift run Waycode
+swift run Hyprshell
 ```
 
 Build a signed local application bundle:
 
 ```bash
 ./scripts/build-app.sh
-open dist/Waycode.app
+open dist/Hyprshell.app
 ```
 
-Move `dist/Waycode.app` to `/Applications` to make Launch at Login registration available.
+Move `dist/Hyprshell.app` to `/Applications` to make Launch at Login registration available.
 
 ## First run
 
 1. Open **Bar** and choose placement, height, radius, inset, and opacity. The desktop bar updates live.
-2. Waycode reads `NSScreen` safe areas on each display and keeps the center clear on MacBooks with a notch. Enable **Split bar around notch** to stop the left and right surfaces before the camera area. The preview simulates the protected area.
+2. Hyprshell reads `NSScreen` safe areas on each display and keeps the center clear on MacBooks with a notch. Enable **Split bar around notch** to stop the left and right surfaces before the camera area. The preview simulates the protected area.
 3. **Sebastian II · 1:1** reproduces the source QML's 42pt base height, 5pt outer gap, 4pt center spacing, 18pt rounding, full `bb7de91` palette, source module order, and grouped status treatment. The style library is a three-column gallery rendered by the production `BarView`. Module islands and Nord intentionally have no enclosing bar box. Connected edge-to-edge presentation is a separate setting, so it can be combined with any style.
-4. Enable **Black notch shelf** under Bar > Placement to paint the physical notch row with an opaque RGB `0,0,0`, square-edged mask and move the complete Waycode bar below it. macOS and MacBook display hardware do not expose an API for disabling only the notch-row backlight, so software cannot physically turn off that strip. The opaque zero-RGB mask is the darkest result the panel can produce.
+4. Enable **Black notch shelf** under Bar > Placement to paint the physical notch row with an opaque RGB `0,0,0`, square-edged mask and move the complete Hyprshell bar below it. macOS and MacBook display hardware do not expose an API for disabling only the notch-row backlight, so software cannot physically turn off that strip. The opaque zero-RGB mask is the darkest result the panel can produce.
 5. Open **Widgets** to edit the same `BarView` renderer used on the desktop. Drag widgets directly across Far left, Before notch, After notch, and Far right, or use the detailed controls. Every widget has its own SF Symbol or image, visibility, pill style, text color, background, typography, padding, radius, and click action.
 6. Add a **Shell widget** to display the first output line from any local command on a configurable refresh interval.
 7. Desktop buttons now read the real ordered Mission Control Spaces every 50 ms and also react directly to Space-change notifications. The selected number updates without a visual animation or artificial delay, including during trackpad and Control+Arrow changes. The active-application label uses notifications plus an 80 ms frontmost-app monitor. Clicking a number updates optimistically before sending the native Control+Number shortcut.
-8. The enabled **Wallpaper** add-on sits on the far left of the bar. Its palette-driven SwiftUI carousel has no generic title bar or loading spinner. Left/Right selects a preview and Return applies it to the current desktop. Down moves keyboard focus to the two apply actions, Left/Right chooses one, Return activates it, and Up returns to previews. Separate actions target the current desktop or every Mission Control desktop.
+8. The enabled **Wallpaper** add-on sits on the far left of the bar. Its palette-driven SwiftUI carousel has no generic title bar or loading spinner. Left/Right selects a preview and Return applies it to the current desktop. Down moves keyboard focus to the two apply actions, Left/Right chooses one, Return activates it, and Up returns to previews. **Apply to all desktops** visits every ordinary SkyLight-managed Mission Control Space, writes the wallpaper with `NSWorkspace`, and restores the originally active Spaces; it does not depend on Control-number shortcuts or System Events exposing only the current desktop.
 9. Wallpaper command shortcuts, including Option+W and Random Wallpaper, are removed from configuration and the keybind editor. Option+A and Option+N remain system-wide sidebar shortcuts. Bar controls use a consistent press response, the Controls button is a real button, and clicking Settings again closes its window.
 10. The assistant control is a simple white, rounded four-point sparkle. Click it or press **Option+A** for Gemini; press **Option+N** for Controls. Side panels no longer respond to two-finger horizontal swipes and dismiss only after three seconds without mouse, keyboard, or scrolling activity. Clicking the CPU/RAM module opens a compact themed SwiftUI process panel showing overall usage and the busiest open applications with per-app CPU and RAM percentages.
-11. The Transparency control is expressed in the expected direction: 0% is opaque and 100% is transparent. Bar panels participate separately in each Space instead of exposing a stationary panel over the compositor's black transition frame. Optional Blur uses a cached wallpaper-backed texture instead of `NSVisualEffectView`, preventing macOS from changing material emphasis during four-finger Space gestures. Changes save automatically to `~/Library/Application Support/Waycode/config.json`.
-12. Waycode checks notification and Location authorization silently and never opens a permission prompt at launch. Clicking Wi-Fi no longer requests Location: an existing grant enables nearby SSID scanning, while Wi-Fi power and current status remain available without it. Accessibility checks are also silent. Production builds use the stable `Termatica Release Signing` identity so macOS can retain TCC grants across updates.
-13. **Tiling** is an event-driven Hyprland-style window manager. With one existing window, opening a second splits the desktop exactly into the original client on the left and the new client on the right, respecting configured gaps. Additional clients recursively split the remaining leaf using Hyprland dwindle behavior. Window identity uses stable Core Graphics window numbers, and current-Space detection uses public on-screen window data so other desktops are not moved. Launch, window-created, close, minimize, activation, and display events trigger automatic reflow. Dialogs, fullscreen windows, fixed-size windows, and exceptions float. Waycode checks Accessibility silently; it only displays the macOS permission request after the user explicitly presses **Grant Accessibility**.
+11. The Transparency control is expressed in the expected direction: 0% is opaque and 100% is transparent. Bar panels participate separately in each Space instead of exposing a stationary panel over the compositor's black transition frame. Optional Blur uses a cached wallpaper-backed texture instead of `NSVisualEffectView`, preventing macOS from changing material emphasis during four-finger Space gestures. Changes save automatically to `~/Library/Application Support/Hyprshell/config.json`.
+12. Hyprshell checks notification and Location authorization silently and never opens a permission prompt at launch. Clicking Wi-Fi no longer requests Location: an existing grant enables nearby SSID scanning, while Wi-Fi power and current status remain available without it. Accessibility checks are also silent. Production builds use the stable `Termatica Release Signing` identity so macOS can retain TCC grants across updates.
+13. **Tiling** is an event-driven Hyprland-style window manager. With one existing window, opening a second splits the desktop exactly into the original client on the left and the new client on the right, respecting configured gaps. Additional clients recursively split the remaining leaf using Hyprland dwindle behavior. Window identity uses stable Core Graphics window numbers, and current-Space detection uses public on-screen window data so other desktops are not moved. Launch, window-created, close, minimize, activation, and display events trigger automatic reflow. Dialogs, fullscreen windows, fixed-size windows, and exceptions float. Hyprshell checks Accessibility silently; it only displays the macOS permission request after the user explicitly presses **Grant Accessibility**.
 14. The settings interface is implemented in SwiftUI with a custom navigation rail, centered live bar, interactive style previews, and custom surfaces. AppKit is restricted to macOS window-level integration; no C UI toolkit is used. The settings window stays above normal application windows when opened.
-15. Use the Waycode icon in the macOS menu bar, or the gear widget in the desktop bar, to reopen settings after closing the window.
-16. The supported plan for custom Waycode-initiated workspace animations is documented in `TRANSITIONS_PLAN.md`. macOS does not provide a supported way to replace or retime the native four-finger Mission Control animation itself.
+15. Use the Hyprshell icon in the macOS menu bar, or the gear widget in the desktop bar, to reopen settings after closing the window.
+16. The supported plan for custom Hyprshell-initiated workspace animations is documented in `TRANSITIONS_PLAN.md`. macOS does not provide a supported way to replace or retime the native four-finger Mission Control animation itself.
 
-For a full replacement look, turn on macOS menu bar auto-hide in **System Settings > Desktop & Dock**. Waycode deliberately does not modify that system preference behind your back.
+For a full replacement look, turn on macOS menu bar auto-hide in **System Settings > Desktop & Dock**. Hyprshell deliberately does not modify that system preference behind your back.
 
 ## Configuration
 
-Waycode stores configuration at:
+Hyprshell stores configuration at:
 
 ```text
-~/Library/Application Support/Waycode/config.json
+~/Library/Application Support/Hyprshell/config.json
 ```
 
 Profiles can be imported and exported from the General screen. No web server, JavaScript runtime, SketchyBar installation, or Linux compatibility layer is used.
 
 ## Upstream preset
 
-See [ATTRIBUTION.md](ATTRIBUTION.md). The upstream repository uses Quickshell rather than Waybar. Waycode ports the real module arrangement and palette to native macOS behavior.
+See [ATTRIBUTION.md](ATTRIBUTION.md). The upstream repository uses Quickshell rather than Waybar. Hyprshell ports the real module arrangement and palette to native macOS behavior.

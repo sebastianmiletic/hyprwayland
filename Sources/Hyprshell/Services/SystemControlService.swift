@@ -58,7 +58,7 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         // Wi-Fi toggle/status useful without repeatedly asking.
         switch locationManager.authorizationStatus {
         case .authorized, .authorizedAlways: scanWiFi()
-        case .notDetermined: operationMessage = "Nearby network names need Location access. Waycode will not ask automatically."
+        case .notDetermined: operationMessage = "Nearby network names need Location access. Hyprshell will not ask automatically."
         case .denied, .restricted: operationMessage = "Nearby network names are unavailable; Wi-Fi controls still work."
         @unknown default: operationMessage = "Nearby network names are unavailable."
         }
