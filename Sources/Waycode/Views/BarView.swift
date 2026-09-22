@@ -175,9 +175,9 @@ private struct WidgetView: View {
         } else if widget.kind == .rightSidebar {
             Button { if actionEnabled { performAction() } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.name)
-        } else if widget.kind == .wallpaper {
-            Button { if actionEnabled { showStatusPopover(for: .wallpaper) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
-                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help("Choose wallpaper")
+        } else if widget.kind == .wallpaper || widget.kind == .uptime {
+            Button { if actionEnabled { showStatusPopover(for: widget.kind) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
+                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.kind == .wallpaper ? "Choose wallpaper" : "Application resource usage")
                 .popover(isPresented: popoverPresented, arrowEdge: .top) { statusPopover }
         } else if widget.kind == .battery {
             Button { if actionEnabled { controls.setLowPowerMode(!controls.lowPowerMode) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
@@ -212,7 +212,7 @@ private struct WidgetView: View {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 widgetLabel(context.date.formatted(date: .abbreviated, time: .shortened)).monospacedDigit()
             }
-        case .leftSidebar: widgetLabel("Tools").foregroundStyle(Color(hex: palette.accent))
+        case .leftSidebar: widgetLabel("Tools").foregroundStyle(.white)
         case .wallpaper: widgetLabel("Wallpapers")
         case .activeApp: widgetLabel(system.activeApp)
         case .wifi: widgetLabel(system.wifi)
@@ -251,12 +251,14 @@ private struct WidgetView: View {
     @ViewBuilder private var statusPopover: some View {
         if model.statusPopoverWidgetID == widget.id && model.statusPopoverInteractionID == interactionID {
             if model.statusPopoverDetail == "Wallpapers" { WallpaperBarPopover(model: model).frame(width: 520) }
+            else if model.statusPopoverDetail == "Resources" { ResourceUsagePopover(model: model).frame(width: 390) }
             else { StatusQuickPopover(model: model, detail: model.statusPopoverDetail).frame(width: 300) }
         }
     }
     private func showStatusPopover(for kind: WidgetKind) {
         switch kind {
         case .wallpaper: model.statusPopoverDetail = "Wallpapers"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id
+        case .uptime: model.statusPopoverDetail = "Resources"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; system.refresh()
         case .wifi: model.statusPopoverDetail = "Wi-Fi"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.requestWiFiAccessAndScan()
         case .volume: model.statusPopoverDetail = "Sound"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.refreshAudioDevices()
         case .battery: model.statusPopoverDetail = "Battery"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.refreshPowerState()
@@ -296,6 +298,50 @@ private struct WidgetView: View {
     }
 }
 
+private struct ResourceUsagePopover: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject private var system: SystemMonitor
+    private var palette: ThemePalette { model.configuration.bar.palette }
+    init(model: AppModel) { self.model = model; self.system = model.system }
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                summary("CPU", system.cpu, "cpu")
+                summary("RAM", system.memory, "memorychip")
+            }
+            if system.appUsage.isEmpty {
+                Text("Collecting application usage…").font(.caption).foregroundStyle(Color(hex: palette.muted)).frame(maxWidth: .infinity, minHeight: 80)
+            } else {
+                VStack(spacing: 5) {
+                    HStack { Text("APPLICATION"); Spacer(); Text("CPU").frame(width: 46, alignment: .trailing); Text("RAM").frame(width: 46, alignment: .trailing) }
+                        .font(.system(size: 9, weight: .bold, design: .rounded)).foregroundStyle(Color(hex: palette.muted)).padding(.horizontal, 7)
+                    ForEach(Array(system.appUsage.prefix(8))) { app in
+                        HStack(spacing: 9) {
+                            Text(String(app.name.prefix(1)).uppercased()).font(.caption.bold()).frame(width: 26, height: 26).background(Color(hex: palette.accent).opacity(0.18)).foregroundStyle(Color(hex: palette.accent)).clipShape(RoundedRectangle(cornerRadius: 8))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(app.name).font(.caption.weight(.semibold)).lineLimit(1)
+                                GeometryReader { proxy in
+                                    HStack(spacing: 2) {
+                                        Capsule().fill(Color(hex: palette.accent)).frame(width: proxy.size.width * min(app.cpu / 100, 1))
+                                        Spacer(minLength: 0)
+                                    }
+                                }.frame(height: 3).background(Color(hex: palette.muted).opacity(0.18)).clipShape(Capsule())
+                            }
+                            Text(String(format: "%.1f%%", app.cpu)).font(.caption2.monospacedDigit()).frame(width: 46, alignment: .trailing)
+                            Text(String(format: "%.1f%%", app.memory)).font(.caption2.monospacedDigit()).frame(width: 46, alignment: .trailing).foregroundStyle(Color(hex: palette.muted))
+                        }.padding(.horizontal, 7).frame(height: 39).background(Color(hex: palette.surface).opacity(0.62)).clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+            }
+        }
+        .padding(12).background(LinearGradient(colors: [Color(hex: palette.background), Color(hex: palette.surface).opacity(0.86)], startPoint: .topLeading, endPoint: .bottomTrailing)).foregroundStyle(Color(hex: palette.foreground))
+        .onAppear { system.refresh() }
+    }
+    private func summary(_ title: String, _ value: String, _ icon: String) -> some View {
+        HStack(spacing: 8) { Image(systemName: icon).foregroundStyle(Color(hex: palette.accent)); VStack(alignment: .leading, spacing: 1) { Text(title).font(.caption2).foregroundStyle(Color(hex: palette.muted)); Text(value).font(.headline.monospacedDigit()) }; Spacer() }.padding(10).frame(maxWidth: .infinity).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 11))
+    }
+}
+
 private struct WallpaperBarPopover: View {
     @ObservedObject var model: AppModel
     private var palette: ThemePalette { model.configuration.bar.palette }
@@ -311,28 +357,33 @@ private struct WallpaperBarPopover: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: 9) {
                             ForEach(Array(choices.enumerated()), id: \.element) { index, url in
-                                WallpaperBarCard(url: url, selected: index == selected) { model.wallpaperSelectionIndex = index }.id(index)
+                                WallpaperBarCard(url: url, selected: index == selected) { model.wallpaperFocusArea = 0; model.wallpaperSelectionIndex = index }.id(index)
                             }
                         }.padding(3)
                     }.onChange(of: model.wallpaperSelectionIndex) { _ in withAnimation(.easeOut(duration: 0.18)) { proxy.scrollTo(selected, anchor: .center) } }
                 }.frame(height: 118)
                 HStack(spacing: 8) {
-                    applyButton("Apply to desktop", icon: "desktopcomputer", primary: true) { apply(allDesktops: false) }
-                    applyButton("Apply to all desktops", icon: "rectangle.3.group", primary: false) { apply(allDesktops: true) }
+                    applyButton("Apply to desktop", icon: "desktopcomputer", index: 0) { model.wallpaperApplySelection = 0; apply(allDesktops: false) }
+                    applyButton("Apply to all desktops", icon: "rectangle.3.group", index: 1) { model.wallpaperApplySelection = 1; apply(allDesktops: true) }
                 }
             }
-            WallpaperKeyboardCapture(left: { move(-1) }, right: { move(1) }, enter: { apply(allDesktops: false) }).frame(width: 0, height: 0)
+            WallpaperKeyboardCapture(left: { moveHorizontal(-1) }, right: { moveHorizontal(1) }, up: { model.wallpaperFocusArea = 0 }, down: { model.wallpaperFocusArea = 1 }, enter: { activateSelection() }).frame(width: 0, height: 0)
         }
         .padding(12)
         .background(LinearGradient(colors: [Color(hex: palette.background), Color(hex: palette.surface).opacity(0.9)], startPoint: .topLeading, endPoint: .bottomTrailing))
         .foregroundStyle(Color(hex: palette.foreground)).clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: palette.muted).opacity(0.3)))
-        .onAppear { model.wallpaperSelectionIndex = max(0, choices.firstIndex { $0.path == model.configuration.currentWallpaper } ?? 0) }
+        .onAppear { model.wallpaperSelectionIndex = max(0, choices.firstIndex { $0.path == model.configuration.currentWallpaper } ?? 0); model.wallpaperFocusArea = 0; model.wallpaperApplySelection = 0 }
     }
-    private func move(_ amount: Int) { guard !choices.isEmpty else { return }; model.wallpaperSelectionIndex = min(max(selected + amount, 0), choices.count - 1) }
+    private func moveHorizontal(_ amount: Int) {
+        if model.wallpaperFocusArea == 1 { model.wallpaperApplySelection = min(max(model.wallpaperApplySelection + amount, 0), 1) }
+        else if !choices.isEmpty { model.wallpaperSelectionIndex = min(max(selected + amount, 0), choices.count - 1) }
+    }
+    private func activateSelection() { apply(allDesktops: model.wallpaperFocusArea == 1 && model.wallpaperApplySelection == 1) }
     private func apply(allDesktops: Bool) { guard choices.indices.contains(selected) else { return }; model.setWallpaper(choices[selected], allDesktops: allDesktops) }
-    private func applyButton(_ title: String, icon: String, primary: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Label(title, systemImage: icon).font(.caption.weight(.semibold)).frame(maxWidth: .infinity).frame(height: 34).background(primary ? Color(hex: palette.accent) : Color(hex: palette.surface)).foregroundStyle(primary ? Color(hex: palette.background) : Color(hex: palette.foreground)).clipShape(RoundedRectangle(cornerRadius: 10)) }.buttonStyle(SourcePressButtonStyle())
+    private func applyButton(_ title: String, icon: String, index: Int, action: @escaping () -> Void) -> some View {
+        let focused = model.wallpaperFocusArea == 1 && model.wallpaperApplySelection == index
+        return Button(action: action) { Label(title, systemImage: icon).font(.caption.weight(.semibold)).frame(maxWidth: .infinity).frame(height: 34).background(index == 0 ? Color(hex: palette.accent) : Color(hex: palette.surface)).foregroundStyle(index == 0 ? Color(hex: palette.background) : Color(hex: palette.foreground)).clipShape(RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(focused ? Color.white : Color.clear, lineWidth: 2)) }.buttonStyle(SourcePressButtonStyle())
     }
 }
 
@@ -358,14 +409,16 @@ private struct WallpaperBarCard: View {
 private struct WallpaperKeyboardCapture: NSViewRepresentable {
     let left: () -> Void
     let right: () -> Void
+    let up: () -> Void
+    let down: () -> Void
     let enter: () -> Void
     func makeNSView(context: Context) -> WallpaperKeyView {
-        let view = WallpaperKeyView(); view.left = left; view.right = right; view.enter = enter
+        let view = WallpaperKeyView(); view.left = left; view.right = right; view.up = up; view.down = down; view.enter = enter
         DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
         return view
     }
     func updateNSView(_ view: WallpaperKeyView, context: Context) {
-        view.left = left; view.right = right; view.enter = enter
+        view.left = left; view.right = right; view.up = up; view.down = down; view.enter = enter
         DispatchQueue.main.async { if view.window?.firstResponder !== view { view.window?.makeFirstResponder(view) } }
     }
 }
@@ -373,11 +426,13 @@ private struct WallpaperKeyboardCapture: NSViewRepresentable {
 private final class WallpaperKeyView: NSView {
     var left: () -> Void = {}
     var right: () -> Void = {}
+    var up: () -> Void = {}
+    var down: () -> Void = {}
     var enter: () -> Void = {}
     override var acceptsFirstResponder: Bool { true }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); DispatchQueue.main.async { self.window?.makeFirstResponder(self) } }
     override func keyDown(with event: NSEvent) {
-        switch event.keyCode { case 123: left(); case 124: right(); case 36, 76: enter(); default: super.keyDown(with: event) }
+        switch event.keyCode { case 123: left(); case 124: right(); case 126: up(); case 125: down(); case 36, 76: enter(); default: super.keyDown(with: event) }
     }
 }
 

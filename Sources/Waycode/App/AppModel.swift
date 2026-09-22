@@ -18,6 +18,8 @@ final class AppModel: ObservableObject {
     @Published var wallpaperGridMode = false
     @Published var wallpaperCategory = "All"
     @Published var wallpaperSelectionIndex = 0
+    @Published var wallpaperFocusArea = 0
+    @Published var wallpaperApplySelection = 0
     @Published var sidebarTab = 0
     @Published var sidebarVolume: Double = 50
     @Published var todoDraft = ""
@@ -145,6 +147,10 @@ final class AppModel: ObservableObject {
                 let insertion = min(1, configuration.bar.widgets.count); configuration.bar.widgets.insert(wallpaper, at: insertion)
             }
             configuration.sourcePresetVersion = 12
+        }
+        if configuration.sourcePresetVersion < 13 {
+            if let index = configuration.bar.widgets.firstIndex(where: { $0.kind == .leftSidebar }) { configuration.bar.widgets[index].icon = "sparkle" }
+            configuration.sourcePresetVersion = 13
         }
         // Wallpaper changes are bar/settings-only, including imported profiles.
         configuration.shortcuts.removeAll { $0.action == .wallpaper || $0.action == .randomWallpaper }

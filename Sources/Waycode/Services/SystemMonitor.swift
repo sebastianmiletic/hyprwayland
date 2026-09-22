@@ -2,6 +2,13 @@ import AppKit
 import Combine
 import CoreWLAN
 
+struct AppResourceUsage: Identifiable {
+    let id: pid_t
+    let name: String
+    let cpu: Double
+    let memory: Double
+}
+
 final class SystemMonitor: ObservableObject {
     @Published var activeApp = "Finder"
     @Published var battery = "--"
@@ -10,6 +17,7 @@ final class SystemMonitor: ObservableObject {
     @Published var cpu = "--%"
     @Published var memory = "--%"
     @Published var uptime = "--"
+    @Published var appUsage: [AppResourceUsage] = []
 
     private var timer: Timer?
     private var frontmostTimer: DispatchSourceTimer?
@@ -57,6 +65,19 @@ final class SystemMonitor: ObservableObject {
             guard let range = text.range(of: #"free percentage:\s*(\d+)%"#, options: [.regularExpression, .caseInsensitive]) else { return }
             let match = String(text[range]); let free = Int(match.filter(\.isNumber)) ?? 0
             self?.memory = "\(max(0, min(100, 100 - free)))%"
+        }
+        let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular && !$0.isTerminated }
+        run("ps", ["-axo", "pid=,%cpu=,%mem="]) { [weak self] text in
+            var values: [pid_t: (Double, Double)] = [:]
+            for line in text.split(whereSeparator: \.isNewline) {
+                let fields = line.split(whereSeparator: \.isWhitespace)
+                guard fields.count >= 3, let pid = Int32(fields[0]), let cpu = Double(fields[1]), let memory = Double(fields[2]) else { continue }
+                values[pid] = (cpu, memory)
+            }
+            self?.appUsage = apps.compactMap { app in
+                guard let usage = values[app.processIdentifier] else { return nil }
+                return AppResourceUsage(id: app.processIdentifier, name: app.localizedName ?? app.bundleIdentifier ?? "Application", cpu: usage.0, memory: usage.1)
+            }.sorted { ($0.cpu + $0.memory) > ($1.cpu + $1.memory) }
         }
     }
 

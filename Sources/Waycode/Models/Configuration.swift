@@ -120,7 +120,7 @@ struct WidgetConfiguration: Codable, Equatable, Identifiable {
     }
 
     static let defaults: [WidgetConfiguration] = [
-        .init(kind: .leftSidebar, name: "Tools", placement: .leading, icon: "bundle:arch-purple.png", showLabel: false, style: .plain, clickAction: .leftSidebar),
+        .init(kind: .leftSidebar, name: "Tools", placement: .leading, icon: "sparkle", showLabel: false, style: .plain, clickAction: .leftSidebar),
         .init(kind: .wallpaper, name: "Wallpapers", placement: .leading, icon: "photo.on.rectangle.angled", showLabel: false, style: .pill, clickAction: .none),
         .init(kind: .activeApp, name: "Active app", placement: .leading, icon: "macwindow", style: .plain),
         .init(kind: .uptime, name: "Resources", placement: .beforeNotch, icon: "cpu", style: .pill, horizontalPadding: 5),
@@ -290,7 +290,7 @@ struct WaycodeConfiguration: Codable, Equatable {
     var todos: [String] = []
     var tiling = TilingConfiguration()
     var savedBars: [NamedBarProfile] = []
-    var sourcePresetVersion = 12
+    var sourcePresetVersion = 13
     var launchAtLogin = false
 
     enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, tiling, savedBars, sourcePresetVersion, launchAtLogin }
