@@ -212,10 +212,7 @@ private struct WidgetView: View {
         case .battery:
             HStack(spacing: 5) {
                 if widget.showIcon {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: batterySymbol).foregroundStyle(batteryColor)
-                        if controls.batteryCharging { Image(systemName: "bolt.fill").font(.system(size: 6, weight: .bold)).foregroundStyle(Color(hex: palette.background)).offset(x: 2, y: -1) }
-                    }
+                    Image(systemName: batterySymbol).foregroundStyle(batteryColor)
                 }
                 if widget.showLabel { Text(controls.batteryPercent).lineLimit(1) }
             }
@@ -237,7 +234,8 @@ private struct WidgetView: View {
     }
 
     private var batterySymbol: String {
-        switch controls.batteryLevel { case 90...: "battery.100percent"; case 65..<90: "battery.75percent"; case 40..<65: "battery.50percent"; case 15..<40: "battery.25percent"; default: "battery.0percent" }
+        if controls.batteryCharging { return "battery.100percent.bolt" }
+        switch controls.batteryLevel { case 90...: return "battery.100percent"; case 65..<90: return "battery.75percent"; case 40..<65: return "battery.50percent"; case 15..<40: return "battery.25percent"; default: return "battery.0percent" }
     }
     private var batteryColor: Color { controls.lowPowerMode ? .yellow : .white }
     private var popoverPresented: Binding<Bool> {
@@ -261,10 +259,7 @@ private struct WidgetView: View {
             else if detail.isEmpty { NotificationCenter.default.post(name: .waycodeToggleRightSidebar, object: nil) }
             else { model.statusPopoverDetail = detail; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; if detail == "Wi-Fi" { controls.requestWiFiAccessAndScan() }; if detail == "Sound" { controls.refreshAudioDevices() } }
         } label: {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24)
-                if detail == "Battery" && controls.batteryCharging { Image(systemName: "bolt.fill").font(.system(size: 6, weight: .bold)).foregroundStyle(.white).offset(x: 2, y: 2) }
-            }
+            Image(systemName: detail == "Battery" && controls.batteryCharging ? "battery.100percent.bolt" : icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24)
         }
             .buttonStyle(.plain).help(detail.isEmpty ? "Control center" : detail)
     }
@@ -316,6 +311,7 @@ private struct StatusQuickPopover: View {
     }
     private var icon: String {
         if detail == "Wi-Fi" { return "wifi" }; if detail == "Sound" { return "speaker.wave.2.fill" }
+        if controls.batteryCharging { return "battery.100percent.bolt" }
         switch controls.batteryLevel { case 90...: return "battery.100percent"; case 65..<90: return "battery.75percent"; case 40..<65: return "battery.50percent"; case 15..<40: return "battery.25percent"; default: return "battery.0percent" }
     }
     private var wifiContent: some View {

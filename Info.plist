@@ -16,6 +16,7 @@
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSLocationWhenInUseUsageDescription</key><string>Waycode uses location permission only so macOS can reveal nearby Wi-Fi network names.</string>
+  <key>NSInputMonitoringUsageDescription</key><string>Waycode uses Input Monitoring only to respond to your system-wide Option keyboard shortcuts while other apps are active.</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
 </plist>

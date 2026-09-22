@@ -211,10 +211,7 @@ struct RightSidebarView: View {
     }
     private var batteryDetail: some View {
         VStack(spacing: 14) {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: batterySymbol).font(.system(size: 46)).foregroundStyle(batteryColor)
-                if controls.batteryCharging { Image(systemName: "bolt.fill").font(.caption.bold()).foregroundStyle(.white).offset(x: 4, y: 2) }
-            }
+            Image(systemName: batterySymbol).font(.system(size: 46)).foregroundStyle(batteryColor)
             Text(controls.batteryPercent).font(.system(size: 34, weight: .semibold, design: .rounded))
             Toggle("Low Power Mode", isOn: Binding(get: { controls.lowPowerMode }, set: { controls.setLowPowerMode($0) }))
                 .padding(14).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 14))
@@ -224,7 +221,8 @@ struct RightSidebarView: View {
         }.padding(.top, 30)
     }
     private var batterySymbol: String {
-        switch controls.batteryLevel { case 90...: "battery.100percent"; case 65..<90: "battery.75percent"; case 40..<65: "battery.50percent"; case 15..<40: "battery.25percent"; default: "battery.0percent" }
+        if controls.batteryCharging { return "battery.100percent.bolt" }
+        switch controls.batteryLevel { case 90...: return "battery.100percent"; case 65..<90: return "battery.75percent"; case 40..<65: return "battery.50percent"; case 15..<40: return "battery.25percent"; default: return "battery.0percent" }
     }
     private var batteryColor: Color { controls.lowPowerMode ? .yellow : .white }
     private func signalIcon(_ value: Int) -> String { value > -55 ? "wifi" : value > -72 ? "wifi" : "wifi.exclamationmark" }
@@ -234,9 +232,6 @@ struct RightSidebarView: View {
     }
     private func resource(_ title: String, value: String, icon: String, color: Color? = nil) -> some View { VStack(spacing: 4) { statusIcon(icon, battery: title == "Battery", color: color); Text(value).fontWeight(.semibold); Text(title).font(.caption).foregroundStyle(Color(hex: palette.muted)) }.frame(maxWidth: .infinity) }
     private func statusIcon(_ icon: String, battery: Bool, color: Color? = nil) -> some View {
-        ZStack(alignment: .topTrailing) {
-            Image(systemName: icon).font(.title3).foregroundStyle(battery ? batteryColor : (color ?? Color(hex: palette.foreground)))
-            if battery && controls.batteryCharging { Image(systemName: "bolt.fill").font(.system(size: 6, weight: .bold)).foregroundStyle(.white).offset(x: 2, y: -1) }
-        }
+        Image(systemName: battery && controls.batteryCharging ? "battery.100percent.bolt" : icon).font(.title3).foregroundStyle(battery ? batteryColor : (color ?? Color(hex: palette.foreground)))
     }
 }

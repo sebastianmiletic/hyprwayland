@@ -87,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(menuItem("Open Tools Sidebar", action: #selector(leftSidebarFromMenu)))
         menu.addItem(menuItem("Open Control Center", action: #selector(rightSidebarFromMenu)))
         menu.addItem(menuItem("Toggle Desktop Bar", action: #selector(toggleBarFromMenu)))
+        menu.addItem(menuItem("Enable System-wide Shortcuts…", action: #selector(openInputMonitoringFromMenu)))
         menu.addItem(.separator())
         menu.addItem(menuItem("Quit Waycode", action: #selector(quitFromMenu)))
         item.menu = menu
@@ -102,6 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func leftSidebarFromMenu() { sidePanelController?.toggleLeft() }
     @objc private func rightSidebarFromMenu() { sidePanelController?.toggleRight() }
     @objc private func toggleBarFromMenu() { AppModel.shared.configuration.bar.enabled.toggle() }
+    @objc private func openInputMonitoringFromMenu() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") { NSWorkspace.shared.open(url) }
+    }
     @objc private func quitFromMenu() { NSApp.terminate(nil) }
 
     func perform(_ shortcut: ShortcutConfiguration) {

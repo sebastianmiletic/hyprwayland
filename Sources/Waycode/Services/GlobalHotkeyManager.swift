@@ -12,6 +12,9 @@ final class GlobalHotkeyManager {
     private var keysDown = Set<Int>()
     private var pollingTimer: DispatchSourceTimer?
     private var globalMonitor: Any?
+    private var eventTap: CFMachPort?
+    private var eventTapSource: CFRunLoopSource?
+    private var lastEventTapAttempt = Date.distantPast
     var onShortcut: ((ShortcutConfiguration) -> Void)?
     var onWorkspace: ((Int) -> Void)?
 
@@ -38,10 +41,13 @@ final class GlobalHotkeyManager {
         // Passive fallback for systems where another utility interferes with
         // Carbon delivery. This does not request or open a permission prompt.
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in self?.handleMonitoredKey(event) }
+        installEventTap()
     }
 
     deinit {
         pollingTimer?.cancel(); if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
+        if let eventTapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), eventTapSource, .commonModes) }
+        if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: false) }
         clear(); if let handler { RemoveEventHandler(handler) }
     }
 
@@ -91,6 +97,44 @@ final class GlobalHotkeyManager {
         }
     }
 
+    private func installEventTap() {
+        guard eventTap == nil else { return }
+        lastEventTapAttempt = Date()
+        let mask = CGEventMask(1) << CGEventType.keyDown.rawValue
+        let callback: CGEventTapCallBack = { _, type, event, userInfo in
+            guard let userInfo else { return Unmanaged.passUnretained(event) }
+            let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userInfo).takeUnretainedValue()
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                if let tap = manager.eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
+                return Unmanaged.passUnretained(event)
+            }
+            guard type == .keyDown, event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return Unmanaged.passUnretained(event) }
+            let code = Int(event.getIntegerValueField(.keyboardEventKeycode)); let flags = event.flags
+            DispatchQueue.main.async { manager.handleGlobalKey(code: code, option: flags.contains(.maskAlternate), command: flags.contains(.maskCommand), control: flags.contains(.maskControl), shift: flags.contains(.maskShift)) }
+            return Unmanaged.passUnretained(event)
+        }
+        eventTap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly, eventsOfInterest: mask, callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque())
+        if eventTap == nil, !CGPreflightListenEventAccess(), !UserDefaults.standard.bool(forKey: "WaycodeRequestedInputMonitoring") {
+            UserDefaults.standard.set(true, forKey: "WaycodeRequestedInputMonitoring")
+            _ = CGRequestListenEventAccess()
+            eventTap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly, eventsOfInterest: mask, callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque())
+        }
+        guard let eventTap else { NSLog("Waycode global event tap is unavailable; enable Input Monitoring for Waycode") ; return }
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0); eventTapSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes); CGEvent.tapEnable(tap: eventTap, enable: true)
+        NSLog("Waycode global event tap enabled")
+    }
+
+    private func handleGlobalKey(code: Int, option: Bool, command: Bool, control: Bool, shift: Bool) {
+        if option && !command && !control && !shift {
+            if code == 13 { invoke(systemShortcuts[2001] ?? ShortcutConfiguration(action: .wallpaper, key: "w")); return }
+            if code == 0 { invoke(systemShortcuts[2002] ?? ShortcutConfiguration(action: .leftSidebar, key: "a")); return }
+            if code == 45 { invoke(systemShortcuts[2003] ?? ShortcutConfiguration(action: .rightSidebar, key: "n")); return }
+            if let index = [18, 19, 20, 21, 23, 22, 26, 28, 25].firstIndex(of: code) { invokeWorkspace(index + 1); return }
+        }
+        if let shortcut = polledShortcuts.first(where: { Self.keyCodes[$0.key.lowercased()] == code && $0.option == option && $0.command == command && $0.control == control && $0.shift == shift }) { invoke(shortcut) }
+    }
+
     private func handleMonitoredKey(_ event: NSEvent) {
         guard !event.isARepeat else { return }
         let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
@@ -104,6 +148,7 @@ final class GlobalHotkeyManager {
     }
 
     private func pollKeyboard() {
+        if eventTap == nil, CGPreflightListenEventAccess(), Date().timeIntervalSince(lastEventTapAttempt) > 2 { installEventTap() }
         let state: CGEventSourceStateID = .combinedSessionState
         let flags = CGEventSource.flagsState(state)
         let relevantCodes = Set(polledShortcuts.compactMap { Self.keyCodes[$0.key.lowercased()] } + [18, 19, 20, 21, 23, 22, 26, 28, 25])
