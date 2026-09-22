@@ -35,10 +35,8 @@ final class NotificationDaemon: NSObject, ObservableObject, UNUserNotificationCe
         center.getNotificationSettings { [weak self] settings in
             guard let self else { return }
             DispatchQueue.main.async { self.authorizationStatus = self.label(settings.authorizationStatus) }
-            guard settings.authorizationStatus == .notDetermined else { return }
-            self.center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                DispatchQueue.main.async { self.authorizationStatus = granted ? "Enabled" : "Disabled" }
-            }
+            // Permission prompts are never triggered at launch. macOS owns this
+            // decision; Waycode only uses an existing grant.
         }
     }
 

@@ -173,7 +173,10 @@ private struct WidgetView: View {
         } else if widget.kind == .rightSidebar {
             content.modifier(WidgetChrome(widget: widget, palette: palette)).accessibilityLabel(widget.name).help(widget.name)
                 .popover(isPresented: popoverPresented, arrowEdge: .top) { statusPopover }
-        } else if [.wifi, .volume, .battery].contains(widget.kind) {
+        } else if widget.kind == .battery {
+            Button { if actionEnabled { controls.setLowPowerMode(!controls.lowPowerMode) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
+                .buttonStyle(.plain).accessibilityLabel("Toggle Low Power Mode").help(controls.lowPowerMode ? "Turn Low Power Mode off" : "Turn Low Power Mode on")
+        } else if [.wifi, .volume].contains(widget.kind) {
             Button { if actionEnabled { showStatusPopover(for: widget.kind) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(.plain).accessibilityLabel(widget.name).help(widget.name)
                 .popover(isPresented: popoverPresented, arrowEdge: .top) { statusPopover }
@@ -260,8 +263,9 @@ private struct WidgetView: View {
     private func detailButton(_ icon: String, detail: String, color: Color? = nil) -> some View {
         Button {
             guard actionEnabled else { return }
-            if detail.isEmpty { NotificationCenter.default.post(name: .waycodeToggleRightSidebar, object: nil) }
-            else { model.statusPopoverDetail = detail; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; if detail == "Wi-Fi" { controls.requestWiFiAccessAndScan() }; if detail == "Sound" { controls.refreshAudioDevices() }; if detail == "Battery" { controls.refreshPowerState() } }
+            if detail == "Battery" { controls.setLowPowerMode(!controls.lowPowerMode) }
+            else if detail.isEmpty { NotificationCenter.default.post(name: .waycodeToggleRightSidebar, object: nil) }
+            else { model.statusPopoverDetail = detail; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; if detail == "Wi-Fi" { controls.requestWiFiAccessAndScan() }; if detail == "Sound" { controls.refreshAudioDevices() } }
         } label: { Image(systemName: icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24) }
             .buttonStyle(.plain).help(detail.isEmpty ? "Control center" : detail)
     }

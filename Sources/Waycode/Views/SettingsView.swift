@@ -297,7 +297,7 @@ struct ModuleSettingsView: View {
         SettingsGroup("Desktop buttons") {
             Stepper("Number of desktops: \(model.configuration.bar.workspaceCount)", value: $model.configuration.bar.workspaceCount, in: 1...9)
             Text("Desktop buttons send macOS Control+Number. Enable matching shortcuts in System Settings, Keyboard, Keyboard Shortcuts, Mission Control.").font(.caption).foregroundStyle(.secondary)
-            Button("Request accessibility permission") { WorkspaceController.requestAccessibility() }
+            Button("Open Accessibility Settings") { WorkspaceController.requestAccessibility() }
         }
     }
     private func add(_ kind: WidgetKind) {
@@ -386,7 +386,7 @@ struct TilingSettingsView: View {
             HStack {
                 Button("Tile now") { model.tiling.tileNow() }.buttonStyle(.borderedProminent).disabled(!model.configuration.tiling.enabled)
                 Button("Focus next") { model.tiling.focusNext() }.disabled(!model.configuration.tiling.enabled)
-                if !tiling.hasAccessibility { Button("Grant Accessibility…") { model.tiling.requestAccessibility() } }
+                if !tiling.hasAccessibility { Button("Open Accessibility Settings…") { model.tiling.requestAccessibility() } }
                 Spacer(); Text("\(tiling.managedWindowCount) managed · \(tiling.status)").foregroundStyle(.secondary)
             }
         }

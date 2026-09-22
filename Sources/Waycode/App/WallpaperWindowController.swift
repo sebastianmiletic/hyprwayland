@@ -44,7 +44,7 @@ final class WallpaperWindowController {
 
     private func makeWindow() -> WallpaperPanel {
         let view = WallpaperGalleryView(model: model, standalone: true)
-        let window = WallpaperPanel(contentRect: NSRect(x: 0, y: 0, width: 940, height: 520), styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = WallpaperPanel(contentRect: NSRect(x: 0, y: 0, width: 1060, height: 640), styleMask: [.borderless], backing: .buffered, defer: false)
         window.backgroundColor = .clear; window.isOpaque = false; window.hasShadow = true
         window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

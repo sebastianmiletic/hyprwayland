@@ -81,16 +81,18 @@ struct WallpaperGalleryView: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 12) {
             toolbar
             if model.wallpaperViewMode != 0 { categoryBar }
-            if model.wallpaperViewMode == 0 { homeView }
-            else if filtered.isEmpty { emptyView }
-            else if model.wallpaperGridMode { gridView }
-            else { carouselView }
+            Group {
+                if model.wallpaperViewMode == 0 { homeView }
+                else if filtered.isEmpty { emptyView }
+                else if model.wallpaperGridMode { gridView }
+                else { carouselView }
+            }.padding(6).background(Color(hex: palette.surface).opacity(0.34)).clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
-        .padding(8)
-        .background(Color(hex: palette.background))
+        .padding(14)
+        .background(LinearGradient(colors: [Color(hex: palette.background), Color(hex: palette.surface).opacity(0.72)], startPoint: .topLeading, endPoint: .bottomTrailing))
         .foregroundStyle(Color(hex: palette.foreground))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: palette.muted).opacity(0.3)))
@@ -100,10 +102,14 @@ struct WallpaperGalleryView: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("WAYCODE").font(.caption2.weight(.bold)).tracking(2).foregroundStyle(Color(hex: palette.accent))
+                Text("Wallpaper library").font(.title3.weight(.semibold))
+            }.frame(width: 170, alignment: .leading)
             toolbarButton("house.fill", selected: model.wallpaperViewMode == 0) { model.wallpaperViewMode = 0 }
-            HStack { Image(systemName: "magnifyingglass"); TextField("Search wallpapers", text: $model.wallpaperSearch).textFieldStyle(.plain) }
-                .padding(.horizontal, 12).frame(width: 310, height: 38).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 12))
+            HStack(spacing: 8) { Image(systemName: "magnifyingglass").foregroundStyle(Color(hex: palette.muted)); TextField("Search the library", text: $model.wallpaperSearch).textFieldStyle(.plain); if !model.wallpaperSearch.isEmpty { Button { model.wallpaperSearch = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(Color(hex: palette.muted)) } }
+                .padding(.horizontal, 12).frame(maxWidth: .infinity).frame(height: 40).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             toolbarButton(model.wallpaperGridMode ? "rectangle.split.3x3" : "rectangle.split.3x1", selected: model.wallpaperGridMode) { model.wallpaperGridMode.toggle(); model.wallpaperViewMode = 1 }
             toolbarButton(model.wallpaperViewMode == 2 ? "heart.fill" : "heart", selected: model.wallpaperViewMode == 2) { model.wallpaperViewMode = model.wallpaperViewMode == 2 ? 1 : 2 }
             Spacer()
@@ -116,9 +122,9 @@ struct WallpaperGalleryView: View {
                 Button { model.configuration.adaptColorsToWallpaper.toggle() } label: { Label("Adapt bar colors to wallpaper", systemImage: model.configuration.adaptColorsToWallpaper ? "checkmark" : "circle") }
             } label: { Image(systemName: "plus").frame(width: 28, height: 28) }
             if model.installingWallpaperArchive { ProgressView().controlSize(.small) }
-            Button { applySelected() } label: { Image(systemName: "checkmark").frame(width: 28, height: 28) }.buttonStyle(.plain).keyboardShortcut(.return, modifiers: []).help("Apply selected wallpaper")
+            Button { applySelected() } label: { Label("Apply", systemImage: "checkmark").font(.caption.weight(.semibold)).padding(.horizontal, 12).frame(height: 38).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(RoundedRectangle(cornerRadius: 12)) }.buttonStyle(.plain).keyboardShortcut(.return, modifiers: []).help("Apply selected wallpaper")
             toolbarButton("shuffle", selected: false) { model.randomWallpaper() }
-        }.frame(height: 38).help(model.wallpaperArchiveStatus)
+        }.frame(height: 44).help(model.wallpaperArchiveStatus)
     }
     private var categoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {

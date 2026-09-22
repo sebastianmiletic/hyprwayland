@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidePanelController = SidePanelController(model: model)
         let manager = GlobalHotkeyManager()
         manager.onShortcut = { [weak self] shortcut in self?.perform(shortcut) }
+        manager.onWorkspace = { number in model.workspaces.switchTo(number) { model.statusMessage = $0 } }
         manager.register(model.configuration.shortcuts)
         hotkeys = manager
         cancellable = model.$configuration.map(\.shortcuts).removeDuplicates().sink { [weak manager] in manager?.register($0) }

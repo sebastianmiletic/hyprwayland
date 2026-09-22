@@ -59,15 +59,12 @@ final class WorkspaceService: ObservableObject {
 
     func switchTo(_ number: Int, report: @escaping (String) -> Void) {
         guard number >= 1, number <= max(desktopCount, 1) else { return }
-        guard AXIsProcessTrusted() else {
-            report("Allow Waycode in Privacy & Security > Accessibility. Waycode will not prompt again automatically.")
-            return
-        }
+        if number == currentDesktop { return }
         currentDesktop = number
         WorkspaceController.switchTo(number)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             self?.refresh()
-            if self?.currentDesktop != number { report("Enable Control–\(number) in Keyboard > Keyboard Shortcuts > Mission Control") }
+            if self?.currentDesktop != number { report("Turn on Control–\(number) in System Settings › Keyboard › Keyboard Shortcuts › Mission Control") }
         }
     }
 

@@ -5,11 +5,9 @@ final class GlobalHotkeyManager {
     private var refs: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
     private var registeredShortcuts: [UInt32: ShortcutConfiguration] = [:]
-    private var monitoredShortcuts: [ShortcutConfiguration] = []
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
     private var lastInvocation: (UUID, Date)?
     var onShortcut: ((ShortcutConfiguration) -> Void)?
+    var onWorkspace: ((Int) -> Void)?
 
     init() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -18,23 +16,31 @@ final class GlobalHotkeyManager {
             var id = EventHotKeyID()
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
             let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+            if (1001...1009).contains(id.id) {
+                DispatchQueue.main.async { manager.onWorkspace?(Int(id.id - 1000)) }
+                return noErr
+            }
             guard let shortcut = manager.registeredShortcuts[id.id] else { return noErr }
             DispatchQueue.main.async { manager.invoke(shortcut) }
             return noErr
         }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handler)
         if status != noErr { NSLog("Waycode could not install the global hotkey handler (OSStatus %d)", status) }
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] in self?.handleMonitoredKey($0) }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in self?.handleMonitoredKey(event); return event }
     }
 
-    deinit {
-        clear(); if let handler { RemoveEventHandler(handler) }
-        if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }; if let localMonitor { NSEvent.removeMonitor(localMonitor) }
-    }
+    deinit { clear(); if let handler { RemoveEventHandler(handler) } }
 
     func register(_ shortcuts: [ShortcutConfiguration]) {
-        clear(); monitoredShortcuts = shortcuts
+        clear()
         var combinations = Set<String>()
+        // Workspace navigation is intentionally fixed and global, matching the
+        // desktop labels in the bar. Carbon hotkeys need no Accessibility or
+        // Input Monitoring permission and continue working behind other apps.
+        for (number, code) in [18, 19, 20, 21, 23, 22, 26, 28, 25].enumerated() {
+            var ref: EventHotKeyRef?
+            let id = EventHotKeyID(signature: Self.signature, id: UInt32(1001 + number))
+            if RegisterEventHotKey(UInt32(code), UInt32(optionKey), id, GetApplicationEventTarget(), 0, &ref) == noErr, let ref { refs.append(ref) }
+            combinations.insert("\(code)-\(UInt32(optionKey))")
+        }
         for (index, shortcut) in shortcuts.enumerated() {
             guard shortcut.option || shortcut.command || shortcut.control || shortcut.shift,
                   let code = Self.keyCodes[shortcut.key.lowercased()] else { continue }
@@ -52,18 +58,6 @@ final class GlobalHotkeyManager {
             if status == noErr, let ref { refs.append(ref); registeredShortcuts[hotkeyID] = shortcut }
             else { NSLog("Waycode could not register global shortcut %@ (OSStatus %d)", shortcut.display, status) }
         }
-    }
-
-    private func handleMonitoredKey(_ event: NSEvent) {
-        guard !event.isARepeat else { return }
-        let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
-        guard let shortcut = monitoredShortcuts.first(where: { shortcut in
-            guard Self.keyCodes[shortcut.key.lowercased()] == Int(event.keyCode) else { return false }
-            var expected: NSEvent.ModifierFlags = []
-            if shortcut.option { expected.insert(.option) }; if shortcut.command { expected.insert(.command) }; if shortcut.control { expected.insert(.control) }; if shortcut.shift { expected.insert(.shift) }
-            return flags == expected
-        }) else { return }
-        DispatchQueue.main.async { [weak self] in self?.invoke(shortcut) }
     }
 
     private func invoke(_ shortcut: ShortcutConfiguration) {

@@ -12,7 +12,9 @@ struct WorkspaceController {
     }
 
     static func requestAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
+        // Never invoke kAXTrustedCheckOptionPrompt: repeated local builds can
+        // otherwise look like unsolicited requests. Permission remains a user
+        // decision in the macOS pane opened by this explicit action.
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) }
     }
 }

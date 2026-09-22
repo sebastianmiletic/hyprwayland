@@ -101,7 +101,7 @@ struct RightSidebarView: View {
         SidebarShell(appearance: model.configuration.bar, close: close) {
             if model.rightSidebarDetail.isEmpty {
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 11) { systemRow; quickToggles; resources; notificationFeed; calendar; todos }.padding(.trailing, 1)
+                    VStack(spacing: 11) { systemRow; quickToggles; resources; notificationFeed; todos }.padding(.trailing, 1)
                 }.transition(.move(edge: .leading).combined(with: .opacity))
             } else {
                 VStack(spacing: 10) {
@@ -152,10 +152,6 @@ struct RightSidebarView: View {
             }
             Button { model.openNotificationCenter() } label: { Label("Open macOS Notification Center", systemImage: "rectangle.topthird.inset.filled") }.buttonStyle(.plain).font(.caption.weight(.semibold)).foregroundStyle(Color(hex: palette.accent))
         }.padding(14).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 17))
-    }
-    private var calendar: some View {
-        DatePicker("", selection: .constant(Date()), displayedComponents: [.date]).datePickerStyle(.graphical).labelsHidden()
-            .padding(8).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 17))
     }
     private var todos: some View {
         VStack(alignment: .leading, spacing: 8) {
