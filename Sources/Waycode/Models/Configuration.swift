@@ -60,10 +60,10 @@ enum WidgetPlacement: String, Codable, CaseIterable, Identifiable {
 }
 enum WidgetStyle: String, Codable, CaseIterable, Identifiable { case plain = "Plain", pill = "Filled pill", outlined = "Outlined pill"; var id: String { rawValue } }
 enum WidgetKind: String, Codable, CaseIterable, Identifiable {
-    case leftSidebar = "Left sidebar", activeApp = "Active app", workspaces = "Workspaces", clock = "Clock", wifi = "Wi-Fi", battery = "Battery", volume = "Volume", uptime = "Uptime", rightSidebar = "Right sidebar", settings = "Settings", customScript = "Shell widget", spacer = "Flexible space"
+    case leftSidebar = "Left sidebar", wallpaper = "Wallpaper", activeApp = "Active app", workspaces = "Workspaces", clock = "Clock", wifi = "Wi-Fi", battery = "Battery", volume = "Volume", uptime = "Uptime", rightSidebar = "Right sidebar", settings = "Settings", customScript = "Shell widget", spacer = "Flexible space"
     var id: String { rawValue }
     var defaultIcon: String {
-        switch self { case .leftSidebar: "sparkles"; case .activeApp: "macwindow"; case .workspaces: "square.grid.3x1.fill"; case .clock: "clock"; case .wifi: "wifi"; case .battery: "battery.75percent"; case .volume: "speaker.wave.2"; case .uptime: "cpu"; case .rightSidebar: "switch.2"; case .settings: "gearshape.fill"; case .customScript: "terminal"; case .spacer: "arrow.left.and.right" }
+        switch self { case .leftSidebar: "sparkles"; case .wallpaper: "photo.on.rectangle.angled"; case .activeApp: "macwindow"; case .workspaces: "square.grid.3x1.fill"; case .clock: "clock"; case .wifi: "wifi"; case .battery: "battery.75percent"; case .volume: "speaker.wave.2"; case .uptime: "cpu"; case .rightSidebar: "switch.2"; case .settings: "gearshape.fill"; case .customScript: "terminal"; case .spacer: "arrow.left.and.right" }
     }
 }
 enum WidgetClickAction: String, Codable, CaseIterable, Identifiable {
@@ -121,6 +121,7 @@ struct WidgetConfiguration: Codable, Equatable, Identifiable {
 
     static let defaults: [WidgetConfiguration] = [
         .init(kind: .leftSidebar, name: "Tools", placement: .leading, icon: "bundle:arch-purple.png", showLabel: false, style: .plain, clickAction: .leftSidebar),
+        .init(kind: .wallpaper, name: "Wallpapers", placement: .leading, icon: "photo.on.rectangle.angled", showLabel: false, style: .pill, clickAction: .none),
         .init(kind: .activeApp, name: "Active app", placement: .leading, icon: "macwindow", style: .plain),
         .init(kind: .uptime, name: "Resources", placement: .beforeNotch, icon: "cpu", style: .pill, horizontalPadding: 5),
         .init(kind: .workspaces, name: "Desktops", placement: .beforeNotch, icon: "square.grid.3x1.fill", style: .pill, horizontalPadding: 5),
@@ -280,7 +281,7 @@ struct ShortcutConfiguration: Codable, Equatable, Identifiable {
 
 struct WaycodeConfiguration: Codable, Equatable {
     var bar = BarConfiguration()
-    var shortcuts = [ShortcutConfiguration(action: .wallpaper, key: "w"), ShortcutConfiguration(action: .leftSidebar, key: "a"), ShortcutConfiguration(action: .rightSidebar, key: "n"), ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
+    var shortcuts = [ShortcutConfiguration(action: .leftSidebar, key: "a"), ShortcutConfiguration(action: .rightSidebar, key: "n"), ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
     var wallpaperFolders = [NSHomeDirectory() + "/Pictures"]
     var wallpaperFiles: [String] = []
     var favoriteWallpapers: [String] = []
@@ -289,7 +290,7 @@ struct WaycodeConfiguration: Codable, Equatable {
     var todos: [String] = []
     var tiling = TilingConfiguration()
     var savedBars: [NamedBarProfile] = []
-    var sourcePresetVersion = 11
+    var sourcePresetVersion = 12
     var launchAtLogin = false
 
     enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, tiling, savedBars, sourcePresetVersion, launchAtLogin }
@@ -297,7 +298,7 @@ struct WaycodeConfiguration: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         bar = try c.decodeIfPresent(BarConfiguration.self, forKey: .bar) ?? BarConfiguration()
-        shortcuts = try c.decodeIfPresent([ShortcutConfiguration].self, forKey: .shortcuts) ?? [ShortcutConfiguration(action: .wallpaper, key: "w"), ShortcutConfiguration(action: .leftSidebar, key: "a"), ShortcutConfiguration(action: .rightSidebar, key: "n"), ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
+        shortcuts = try c.decodeIfPresent([ShortcutConfiguration].self, forKey: .shortcuts) ?? [ShortcutConfiguration(action: .leftSidebar, key: "a"), ShortcutConfiguration(action: .rightSidebar, key: "n"), ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
         wallpaperFolders = try c.decodeIfPresent([String].self, forKey: .wallpaperFolders) ?? [NSHomeDirectory() + "/Pictures"]
         wallpaperFiles = try c.decodeIfPresent([String].self, forKey: .wallpaperFiles) ?? []
         favoriteWallpapers = try c.decodeIfPresent([String].self, forKey: .favoriteWallpapers) ?? []

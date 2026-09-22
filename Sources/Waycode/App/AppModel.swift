@@ -37,6 +37,7 @@ final class AppModel: ObservableObject {
     let workspaces = WorkspaceService()
     let tiling = TilingService()
     let gemini = GeminiService()
+    private let wallpaperTransition = WallpaperTransitionController()
 
     private var cancellables = Set<AnyCancellable>()
     private var wallpaperScanToken = UUID()
@@ -137,9 +138,18 @@ final class AppModel: ObservableObject {
             }
             configuration.sourcePresetVersion = 11
         }
-        // These three entry points are guaranteed global defaults. Repair stale
-        // modifier values left by earlier builds before Carbon registration.
-        let globalDefaults: [(ShortcutAction, String)] = [(.wallpaper, "w"), (.leftSidebar, "a"), (.rightSidebar, "n")]
+        if configuration.sourcePresetVersion < 12 {
+            configuration.shortcuts.removeAll { $0.action == .wallpaper || $0.action == .randomWallpaper }
+            if !configuration.bar.widgets.contains(where: { $0.kind == .wallpaper }) {
+                let wallpaper = WidgetConfiguration(kind: .wallpaper, name: "Wallpapers", placement: .leading, icon: "photo.on.rectangle.angled", showLabel: false, style: .pill)
+                let insertion = min(1, configuration.bar.widgets.count); configuration.bar.widgets.insert(wallpaper, at: insertion)
+            }
+            configuration.sourcePresetVersion = 12
+        }
+        // Wallpaper changes are bar/settings-only, including imported profiles.
+        configuration.shortcuts.removeAll { $0.action == .wallpaper || $0.action == .randomWallpaper }
+        // Sidebar entry points remain guaranteed global defaults.
+        let globalDefaults: [(ShortcutAction, String)] = [(.leftSidebar, "a"), (.rightSidebar, "n")]
         for (action, key) in globalDefaults {
             if let index = configuration.shortcuts.firstIndex(where: { $0.action == action }) {
                 configuration.shortcuts[index].key = key; configuration.shortcuts[index].option = true; configuration.shortcuts[index].command = false; configuration.shortcuts[index].control = false; configuration.shortcuts[index].shift = false
@@ -256,6 +266,8 @@ final class AppModel: ObservableObject {
     }
 
     func setWallpaper(_ url: URL) {
+        guard url.path != configuration.currentWallpaper else { return }
+        wallpaperTransition.begin(from: configuration.currentWallpaper)
         var failures = 0
         let options: [NSWorkspace.DesktopImageOptionKey: Any] = [.imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue, .allowClipping: true]
         for screen in NSScreen.screens {
@@ -279,12 +291,17 @@ final class AppModel: ObservableObject {
             }
             NotificationCenter.default.post(name: .waycodeWallpaperChanged, object: url)
         } else { statusMessage = "Wallpaper failed on \(failures) display(s)" }
+        wallpaperTransition.reveal()
     }
 
     func installWallpaperArchive() {
         guard !installingWallpaperArchive else { return }
-        installingWallpaperArchive = true; wallpaperArchiveStatus = "Downloading ItsTerm1n4l wallpaper archive…"
         let destination = configURL.deletingLastPathComponent().appendingPathComponent("Wallpapers/TerminalArchive", isDirectory: true)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            if !configuration.wallpaperFolders.contains(destination.path) { configuration.wallpaperFolders.append(destination.path) }
+            wallpaperArchiveStatus = "Wallpaper archive is already installed."; refreshWallpapers(); return
+        }
+        installingWallpaperArchive = true; wallpaperArchiveStatus = "Downloading ItsTerm1n4l wallpaper archive…"
         guard let remote = URL(string: "https://codeload.github.com/ItsTerm1n4l/Wallpapers-old-archive/zip/refs/heads/main") else { return }
         URLSession.shared.downloadTask(with: remote) { temporary, _, error in
             guard let temporary, error == nil else {

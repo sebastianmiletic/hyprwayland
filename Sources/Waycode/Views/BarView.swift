@@ -170,21 +170,27 @@ private struct WidgetView: View {
     @ViewBuilder var body: some View {
         if widget.kind == .workspaces {
             content.modifier(WidgetChrome(widget: widget, palette: palette)).accessibilityLabel(widget.name).help(widget.name)
-        } else if widget.kind == .rightSidebar {
+        } else if widget.kind == .rightSidebar && model.configuration.bar.sourceExact {
             content.modifier(WidgetChrome(widget: widget, palette: palette)).accessibilityLabel(widget.name).help(widget.name)
+        } else if widget.kind == .rightSidebar {
+            Button { if actionEnabled { performAction() } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
+                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.name)
+        } else if widget.kind == .wallpaper {
+            Button { if actionEnabled { showStatusPopover(for: .wallpaper) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
+                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help("Choose wallpaper")
                 .popover(isPresented: popoverPresented, arrowEdge: .top) { statusPopover }
         } else if widget.kind == .battery {
             Button { if actionEnabled { controls.setLowPowerMode(!controls.lowPowerMode) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
-                .buttonStyle(.plain).accessibilityLabel("Toggle Low Power Mode").help(controls.lowPowerMode ? "Turn Low Power Mode off" : "Turn Low Power Mode on")
+                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel("Toggle Low Power Mode").help(controls.lowPowerMode ? "Turn Low Power Mode off" : "Turn Low Power Mode on")
         } else if [.wifi, .volume].contains(widget.kind) {
             Button { if actionEnabled { showStatusPopover(for: widget.kind) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
-                .buttonStyle(.plain).accessibilityLabel(widget.name).help(widget.name)
+                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.name)
                 .popover(isPresented: popoverPresented, arrowEdge: .top) { statusPopover }
+        } else if widget.clickAction != .none {
+            Button { if actionEnabled { performAction() } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
+                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.name)
         } else {
-            content.modifier(WidgetChrome(widget: widget, palette: palette))
-                .contentShape(Rectangle())
-                .onTapGesture { if actionEnabled { performAction() } }
-                .accessibilityAddTraits(.isButton).accessibilityLabel(widget.name).help(widget.name)
+            content.modifier(WidgetChrome(widget: widget, palette: palette)).accessibilityLabel(widget.name).help(widget.name)
         }
     }
 
@@ -199,7 +205,7 @@ private struct WidgetView: View {
                         Text("\(number)").font(.system(size: 11, weight: .semibold, design: .rounded)).frame(width: 22, height: 22)
                             .background(number == workspaces.currentDesktop ? Color(hex: palette.accent) : .clear)
                             .foregroundStyle(number == workspaces.currentDesktop ? Color(hex: palette.background) : Color(hex: palette.muted)).clipShape(Circle()).frame(width: 26, height: 26)
-                    }.buttonStyle(.plain).accessibilityLabel("Desktop \(number)")
+                    }.buttonStyle(SourcePressButtonStyle()).accessibilityLabel("Desktop \(number)")
                 }
             }
         case .clock:
@@ -207,6 +213,7 @@ private struct WidgetView: View {
                 widgetLabel(context.date.formatted(date: .abbreviated, time: .shortened)).monospacedDigit()
             }
         case .leftSidebar: widgetLabel("Tools")
+        case .wallpaper: widgetLabel("Wallpapers")
         case .activeApp: widgetLabel(system.activeApp)
         case .wifi: widgetLabel(system.wifi)
         case .battery:
@@ -242,10 +249,14 @@ private struct WidgetView: View {
         Binding(get: { model.statusPopoverWidgetID == widget.id && model.statusPopoverInteractionID == interactionID }, set: { if !$0 { model.statusPopoverWidgetID = nil; model.statusPopoverInteractionID = nil; model.statusPopoverDetail = "" } })
     }
     @ViewBuilder private var statusPopover: some View {
-        if model.statusPopoverWidgetID == widget.id && model.statusPopoverInteractionID == interactionID { StatusQuickPopover(model: model, detail: model.statusPopoverDetail).frame(width: 300) }
+        if model.statusPopoverWidgetID == widget.id && model.statusPopoverInteractionID == interactionID {
+            if model.statusPopoverDetail == "Wallpapers" { WallpaperBarPopover(model: model).frame(width: 520) }
+            else { StatusQuickPopover(model: model, detail: model.statusPopoverDetail).frame(width: 300) }
+        }
     }
     private func showStatusPopover(for kind: WidgetKind) {
         switch kind {
+        case .wallpaper: model.statusPopoverDetail = "Wallpapers"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id
         case .wifi: model.statusPopoverDetail = "Wi-Fi"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.requestWiFiAccessAndScan()
         case .volume: model.statusPopoverDetail = "Sound"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.refreshAudioDevices()
         case .battery: model.statusPopoverDetail = "Battery"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.refreshPowerState()
@@ -261,7 +272,7 @@ private struct WidgetView: View {
         } label: {
             Image(systemName: detail == "Battery" && controls.batteryCharging ? "battery.100percent.bolt" : icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24)
         }
-            .buttonStyle(.plain).help(detail.isEmpty ? "Control center" : detail)
+            .buttonStyle(SourcePressButtonStyle()).help(detail.isEmpty ? "Control center" : detail)
     }
     private func widgetLabel(_ value: String) -> some View {
         HStack(spacing: 6) {
@@ -282,6 +293,64 @@ private struct WidgetView: View {
         case .randomWallpaper: model.randomWallpaper()
         case .shell: ScriptWidgetRunner.runAction(widget.clickCommand)
         }
+    }
+}
+
+private struct WallpaperBarPopover: View {
+    @ObservedObject var model: AppModel
+    private var palette: ThemePalette { model.configuration.bar.palette }
+    private var selected: Int { min(max(model.wallpaperSelectionIndex, 0), max(choices.count - 1, 0)) }
+    private var choices: [URL] { Array(model.wallpapers.prefix(120)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) { Text("Wallpapers").font(.headline); Text("← → to browse · Return to apply everywhere").font(.caption).foregroundStyle(Color(hex: palette.muted)) }
+                Spacer(); Text("\(choices.isEmpty ? 0 : selected + 1)/\(choices.count)").font(.caption.monospacedDigit()).foregroundStyle(Color(hex: palette.muted))
+            }
+            if choices.isEmpty {
+                VStack(spacing: 8) { Image(systemName: "photo.badge.plus").font(.title); Text("Add wallpaper folders in Waycode Settings").font(.caption) }.frame(maxWidth: .infinity, minHeight: 120).foregroundStyle(Color(hex: palette.muted))
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 9) {
+                            ForEach(Array(choices.enumerated()), id: \.element) { index, url in
+                                WallpaperBarCard(url: url, selected: index == selected) { model.wallpaperSelectionIndex = index }.id(index)
+                            }
+                        }.padding(3)
+                    }.onChange(of: model.wallpaperSelectionIndex) { _ in withAnimation(.easeOut(duration: 0.18)) { proxy.scrollTo(selected, anchor: .center) } }
+                }.frame(height: 118)
+                Button { apply() } label: { Label("Apply to every desktop", systemImage: "checkmark").frame(maxWidth: .infinity).frame(height: 34).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(RoundedRectangle(cornerRadius: 10)) }
+                    .buttonStyle(SourcePressButtonStyle()).keyboardShortcut(.return, modifiers: [])
+            }
+        }
+        .padding(14).background(Color(hex: palette.background)).foregroundStyle(Color(hex: palette.foreground))
+        .focusable().onMoveCommand { direction in
+            guard !choices.isEmpty else { return }
+            if direction == .left { model.wallpaperSelectionIndex = max(0, selected - 1) }
+            if direction == .right { model.wallpaperSelectionIndex = min(choices.count - 1, selected + 1) }
+        }
+        .onAppear { model.wallpaperSelectionIndex = max(0, choices.firstIndex { $0.path == model.configuration.currentWallpaper } ?? 0) }
+    }
+    private func apply() { guard choices.indices.contains(selected) else { return }; model.setWallpaper(choices[selected]) }
+}
+
+private struct WallpaperBarCard: View {
+    let url: URL
+    let selected: Bool
+    let action: () -> Void
+    @ObservedObject private var thumbnail: WallpaperThumbnailLoader
+    init(url: URL, selected: Bool, action: @escaping () -> Void) { self.url = url; self.selected = selected; self.action = action; self.thumbnail = WallpaperThumbnailLoader(url: url, size: CGSize(width: 180, height: 110)) }
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .bottomLeading) {
+                if let image = thumbnail.image { Image(nsImage: image).resizable().scaledToFill() } else { Color.black.opacity(0.25); ProgressView() }
+                LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .center, endPoint: .bottom)
+                Text(url.deletingPathExtension().lastPathComponent).font(.caption2.weight(.semibold)).foregroundStyle(.white).lineLimit(1).padding(8)
+            }.frame(width: selected ? 166 : 150, height: selected ? 108 : 96).clipped().clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 13).stroke(.white.opacity(selected ? 0.95 : 0.15), lineWidth: selected ? 3 : 1))
+                .animation(.easeOut(duration: 0.16), value: selected)
+        }.buttonStyle(SourcePressButtonStyle())
     }
 }
 

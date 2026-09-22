@@ -58,7 +58,7 @@ final class GlobalHotkeyManager {
         // dispatcher. They do not depend on the settings window, app focus, or
         // the editable keybind list.
         let fixed: [(UInt32, ShortcutAction, String, Int)] = [
-            (2001, .wallpaper, "w", 13), (2002, .leftSidebar, "a", 0), (2003, .rightSidebar, "n", 45)
+            (2002, .leftSidebar, "a", 0), (2003, .rightSidebar, "n", 45)
         ]
         for (idValue, action, key, code) in fixed {
             let shortcut = ShortcutConfiguration(action: action, key: key)
@@ -127,7 +127,6 @@ final class GlobalHotkeyManager {
 
     private func handleGlobalKey(code: Int, option: Bool, command: Bool, control: Bool, shift: Bool) {
         if option && !command && !control && !shift {
-            if code == 13 { invoke(systemShortcuts[2001] ?? ShortcutConfiguration(action: .wallpaper, key: "w")); return }
             if code == 0 { invoke(systemShortcuts[2002] ?? ShortcutConfiguration(action: .leftSidebar, key: "a")); return }
             if code == 45 { invoke(systemShortcuts[2003] ?? ShortcutConfiguration(action: .rightSidebar, key: "n")); return }
             if let index = [18, 19, 20, 21, 23, 22, 26, 28, 25].firstIndex(of: code) { invokeWorkspace(index + 1); return }

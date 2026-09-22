@@ -10,7 +10,7 @@ struct ShortcutSettingsView: View {
             ForEach(Array(model.configuration.shortcuts.indices), id: \.self) { index in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Picker("Action", selection: $model.configuration.shortcuts[index].action) { ForEach(ShortcutAction.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 170)
+                        Picker("Action", selection: $model.configuration.shortcuts[index].action) { ForEach(ShortcutAction.allCases.filter { $0 != .wallpaper && $0 != .randomWallpaper }) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 170)
                         modifier("⌃", value: $model.configuration.shortcuts[index].control)
                         modifier("⌥", value: $model.configuration.shortcuts[index].option)
                         modifier("⇧", value: $model.configuration.shortcuts[index].shift)
@@ -31,10 +31,6 @@ struct ShortcutSettingsView: View {
             HStack {
                 Button { model.configuration.shortcuts.append(ShortcutConfiguration(action: .toggleBar, key: "b")) } label: { Label("Add keybind", systemImage: "plus") }
                 Button { model.configuration.shortcuts.append(ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true)) } label: { Label("Add ⌘E Finder", systemImage: "folder") }
-                Button("Restore Option + W") {
-                    model.configuration.shortcuts.removeAll { $0.action == .wallpaper }
-                    model.configuration.shortcuts.insert(ShortcutConfiguration(action: .wallpaper, key: "w"), at: 0)
-                }
             }
             Text("Shortcuts are re-registered immediately and work from every app. Keep at least one modifier selected. If two entries use the same combination, macOS keeps the first one.").font(.caption).foregroundStyle(.secondary)
         }
@@ -114,10 +110,13 @@ struct WallpaperGalleryView: View {
             toolbarButton(model.wallpaperViewMode == 2 ? "heart.fill" : "heart", selected: model.wallpaperViewMode == 2) { model.wallpaperViewMode = model.wallpaperViewMode == 2 ? 1 : 2 }
             Spacer()
             Menu {
-                Button("Add folder") { model.addWallpaperFolder() }
-                Button("Add images") { model.addWallpaperFiles() }
+                if !standalone {
+                    Button("Add folder") { model.addWallpaperFolder() }
+                    Button("Add images") { model.addWallpaperFiles() }
+                    Button(model.installingWallpaperArchive ? "Installing archive…" : "Install GitHub wallpaper collection") { model.installWallpaperArchive() }.disabled(model.installingWallpaperArchive)
+                    Divider()
+                }
                 Button("Refresh") { model.refreshWallpapers() }
-                Button(model.installingWallpaperArchive ? "Installing archive…" : "Install GitHub wallpaper collection") { model.installWallpaperArchive() }.disabled(model.installingWallpaperArchive)
                 Divider()
                 Button { model.configuration.adaptColorsToWallpaper.toggle() } label: { Label("Adapt bar colors to wallpaper", systemImage: model.configuration.adaptColorsToWallpaper ? "checkmark" : "circle") }
             } label: { Image(systemName: "plus").frame(width: 28, height: 28) }
@@ -163,7 +162,8 @@ struct WallpaperGalleryView: View {
         VStack(spacing: 10) {
             Image(systemName: model.wallpaperViewMode == 2 ? "heart.slash" : "photo.on.rectangle.angled").font(.system(size: 38))
             Text(model.wallpaperViewMode == 2 ? "No favorite wallpapers" : "No wallpapers found").font(.headline)
-            HStack { Button("Add wallpaper folder") { model.addWallpaperFolder() }; Button("Install GitHub collection") { model.installWallpaperArchive() }.disabled(model.installingWallpaperArchive) }
+            if standalone { Text("Add wallpaper folders in Waycode Settings.").font(.caption) }
+            else { HStack { Button("Add wallpaper folder") { model.addWallpaperFolder() }; Button("Install GitHub collection") { model.installWallpaperArchive() }.disabled(model.installingWallpaperArchive) } }
             if !model.wallpaperArchiveStatus.isEmpty { Text(model.wallpaperArchiveStatus).font(.caption) }
         }
             .foregroundStyle(Color(hex: palette.muted)).frame(maxWidth: .infinity, maxHeight: .infinity)

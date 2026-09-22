@@ -11,7 +11,6 @@ struct WaycodeApp: App {
             .defaultSize(width: 1050, height: 720)
             .commands {
                 CommandGroup(after: .appInfo) {
-                    Button("Toggle Wallpaper Gallery") { appDelegate.showWallpaperGallery() }
                     Button("Toggle Desktop Bar") { model.configuration.bar.enabled.toggle() }.keyboardShortcut("b", modifiers: [.option])
                 }
                 CommandGroup(replacing: .newItem) { }
@@ -56,9 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showWallpaperGallery() { wallpaperController?.show() }
     func showSettings() {
         captureSettingsWindow()
+        guard let settingsWindow else { return }
+        if settingsWindow.isVisible { settingsWindow.orderOut(nil); return }
         NSApp.activate(ignoringOtherApps: true)
-        settingsWindow?.makeKeyAndOrderFront(nil)
-        settingsWindow?.orderFrontRegardless()
+        settingsWindow.makeKeyAndOrderFront(nil); settingsWindow.orderFrontRegardless()
     }
 
     private func captureSettingsWindow() {
@@ -81,9 +81,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let menu = NSMenu()
         menu.addItem(menuItem("Open Waycode Settings", action: #selector(openSettingsFromMenu)))
-        menu.addItem(menuItem("Wallpaper Gallery", action: #selector(openWallpapersFromMenu)))
-        menu.addItem(menuItem("Random Wallpaper", action: #selector(randomWallpaperFromMenu)))
-        menu.addItem(.separator())
         menu.addItem(menuItem("Open Tools Sidebar", action: #selector(leftSidebarFromMenu)))
         menu.addItem(menuItem("Open Control Center", action: #selector(rightSidebarFromMenu)))
         menu.addItem(menuItem("Toggle Desktop Bar", action: #selector(toggleBarFromMenu)))
@@ -98,8 +95,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: ""); item.target = self; return item
     }
     @objc private func openSettingsFromMenu() { showSettings() }
-    @objc private func openWallpapersFromMenu() { showWallpaperGallery() }
-    @objc private func randomWallpaperFromMenu() { AppModel.shared.randomWallpaper() }
     @objc private func leftSidebarFromMenu() { sidePanelController?.toggleLeft() }
     @objc private func rightSidebarFromMenu() { sidePanelController?.toggleRight() }
     @objc private func toggleBarFromMenu() { AppModel.shared.configuration.bar.enabled.toggle() }
