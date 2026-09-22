@@ -2,12 +2,12 @@ import SwiftUI
 import Combine
 
 @main
-struct HyprshellApp: App {
+struct RyftApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ObservedObject private var model = AppModel.shared
 
     var body: some Scene {
-        WindowGroup("Hyprshell") { SettingsView(model: model) }
+        WindowGroup("Ryft") { SettingsView(model: model) }
             .defaultSize(width: 1050, height: 720)
             .commands {
                 CommandGroup(after: .appInfo) {
@@ -41,10 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.register(model.configuration.shortcuts)
         hotkeys = manager
         cancellable = model.$configuration.map(\.shortcuts).removeDuplicates().dropFirst().sink { [weak manager] in manager?.register($0) }
-        observers.append(NotificationCenter.default.addObserver(forName: .hyprshellShowWallpapers, object: nil, queue: .main) { [weak self] _ in self?.showWallpaperGallery() })
-        observers.append(NotificationCenter.default.addObserver(forName: .hyprshellShowSettings, object: nil, queue: .main) { [weak self] _ in self?.showSettings() })
-        observers.append(NotificationCenter.default.addObserver(forName: .hyprshellToggleLeftSidebar, object: nil, queue: .main) { [weak self] _ in self?.sidePanelController?.toggleLeft() })
-        observers.append(NotificationCenter.default.addObserver(forName: .hyprshellToggleRightSidebar, object: nil, queue: .main) { [weak self] note in self?.sidePanelController?.toggleRight(detail: note.object as? String ?? "") })
+        observers.append(NotificationCenter.default.addObserver(forName: .ryftShowWallpapers, object: nil, queue: .main) { [weak self] _ in self?.showWallpaperGallery() })
+        observers.append(NotificationCenter.default.addObserver(forName: .ryftShowSettings, object: nil, queue: .main) { [weak self] _ in self?.showSettings() })
+        observers.append(NotificationCenter.default.addObserver(forName: .ryftToggleLeftSidebar, object: nil, queue: .main) { [weak self] _ in self?.sidePanelController?.toggleLeft() })
+        observers.append(NotificationCenter.default.addObserver(forName: .ryftToggleRightSidebar, object: nil, queue: .main) { [weak self] note in self?.sidePanelController?.toggleRight(detail: note.object as? String ?? "") })
         installStatusItem()
         DispatchQueue.main.async { [weak self] in self?.captureSettingsWindow() }
     }
@@ -57,13 +57,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captureSettingsWindow()
         guard let settingsWindow else { return }
         if settingsWindow.isVisible { settingsWindow.orderOut(nil); return }
+        AppModel.shared.selectedSection = .home
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow.makeKeyAndOrderFront(nil); settingsWindow.orderFrontRegardless()
     }
 
     private func captureSettingsWindow() {
         if settingsWindow == nil {
-            settingsWindow = NSApp.windows.first(where: { !($0 is NSPanel) && $0.title != "Wallpaper gallery" }) ?? NSApp.windows.first(where: { $0.title == "Hyprshell" })
+            settingsWindow = NSApp.windows.first(where: { !($0 is NSPanel) && $0.title != "Wallpaper gallery" }) ?? NSApp.windows.first(where: { $0.title == "Ryft" })
         }
         guard let settingsWindow else { return }
         settingsWindow.isReleasedWhenClosed = false
@@ -75,18 +76,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            button.image = NSImage(systemSymbolName: "rectangle.split.2x1.fill", accessibilityDescription: "Hyprshell")
+            button.image = NSImage(systemSymbolName: "rectangle.split.2x1.fill", accessibilityDescription: "Ryft")
             button.image?.isTemplate = true
-            button.toolTip = "Hyprshell"
+            button.toolTip = "Ryft"
         }
         let menu = NSMenu()
-        menu.addItem(menuItem("Open Hyprshell Settings", action: #selector(openSettingsFromMenu)))
+        menu.addItem(menuItem("Open Ryft Settings", action: #selector(openSettingsFromMenu)))
         menu.addItem(menuItem("Open Tools Sidebar", action: #selector(leftSidebarFromMenu)))
         menu.addItem(menuItem("Open Control Center", action: #selector(rightSidebarFromMenu)))
         menu.addItem(menuItem("Toggle Desktop Bar", action: #selector(toggleBarFromMenu)))
         menu.addItem(menuItem("Enable System-wide Shortcuts…", action: #selector(openInputMonitoringFromMenu)))
         menu.addItem(.separator())
-        menu.addItem(menuItem("Quit Hyprshell", action: #selector(quitFromMenu)))
+        menu.addItem(menuItem("Quit Ryft", action: #selector(quitFromMenu)))
         item.menu = menu
         statusItem = item
     }

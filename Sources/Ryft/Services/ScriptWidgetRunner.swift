@@ -36,9 +36,9 @@ final class ScriptWidgetRunner: ObservableObject {
 }
 
 extension Notification.Name {
-    static let hyprshellShowWallpapers = Notification.Name("Hyprshell.showWallpapers")
-    static let hyprshellShowSettings = Notification.Name("Hyprshell.showSettings")
-    static let hyprshellToggleLeftSidebar = Notification.Name("Hyprshell.toggleLeftSidebar")
-    static let hyprshellToggleRightSidebar = Notification.Name("Hyprshell.toggleRightSidebar")
-    static let hyprshellWallpaperChanged = Notification.Name("Hyprshell.wallpaperChanged")
+    static let ryftShowWallpapers = Notification.Name("Ryft.showWallpapers")
+    static let ryftShowSettings = Notification.Name("Ryft.showSettings")
+    static let ryftToggleLeftSidebar = Notification.Name("Ryft.toggleLeftSidebar")
+    static let ryftToggleRightSidebar = Notification.Name("Ryft.toggleRightSidebar")
+    static let ryftWallpaperChanged = Notification.Name("Ryft.wallpaperChanged")
 }

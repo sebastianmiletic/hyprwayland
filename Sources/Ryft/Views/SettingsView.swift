@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import Darwin
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
@@ -10,9 +11,9 @@ struct SettingsView: View {
                 HStack(spacing: 9) {
                     ZStack { RoundedRectangle(cornerRadius: 8).fill(Color(hex: model.configuration.bar.palette.accent)); Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundStyle(Color(hex: model.configuration.bar.palette.background)) }
                         .frame(width: 30, height: 30)
-                    Text("Hyprshell").font(.system(size: 19, weight: .bold, design: .rounded))
+                    Text("Ryft").font(.system(size: 19, weight: .bold, design: .rounded))
                 }.padding(.horizontal, 12).padding(.bottom, 12)
-                ForEach(AppSection.allCases) { section in
+                ForEach(AppSection.allCases.filter { $0 != .home }) { section in
                     Button { model.selectedSection = section } label: {
                         HStack(spacing: 10) { Image(systemName: section.symbol).frame(width: 18); Text(section.rawValue); Spacer() }
                             .padding(.horizontal, 11).frame(height: 36)
@@ -48,6 +49,7 @@ struct SettingsView: View {
 
     @ViewBuilder private var page: some View {
         switch model.selectedSection {
+        case .home: HomeSettingsView(model: model)
         case .bar: BarSettingsView(model: model)
         case .themes: ThemeSettingsView(model: model)
         case .modules: ModuleSettingsView(model: model)
@@ -69,6 +71,7 @@ private struct PageHeader: View {
     }
     private var subtitle: String {
         switch section {
+        case .home: "Your desktop, wallpaper, and Mac at a glance."
         case .bar: "Shape the live desktop bar. Changes appear immediately."
         case .themes: "Choose a preset or tune every color."
         case .modules: "Decide what earns space in the bar."
@@ -90,6 +93,43 @@ struct SettingsGroup<Content: View>: View {
             content
         }.padding(18).background(Color.primary.opacity(0.045)).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(.primary.opacity(0.08)))
+    }
+}
+
+struct HomeSettingsView: View {
+    @ObservedObject var model: AppModel
+    private var palette: ThemePalette { model.configuration.bar.palette }
+    private var wallpaperName: String { URL(fileURLWithPath: model.configuration.currentWallpaper).deletingPathExtension().lastPathComponent }
+    var body: some View {
+        VStack(spacing: 16) {
+            ZStack(alignment: .bottomLeading) {
+                if let image = NSImage(contentsOfFile: model.configuration.currentWallpaper) { Image(nsImage: image).resizable().scaledToFill() }
+                else { LinearGradient(colors: [Color(hex: palette.surface), Color(hex: palette.background)], startPoint: .topLeading, endPoint: .bottomTrailing) }
+                LinearGradient(colors: [.clear, .black.opacity(0.78)], startPoint: .center, endPoint: .bottom)
+                VStack(alignment: .leading, spacing: 4) { Text(wallpaperName.isEmpty ? "Desktop" : wallpaperName).font(.title2.bold()); Text("Current wallpaper").font(.caption).foregroundStyle(.white.opacity(0.75)) }.foregroundStyle(.white).padding(20)
+            }.frame(height: 285).clipped().clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(hex: palette.muted).opacity(0.28)))
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                spec("Mac", DeviceDetails.model, "laptopcomputer")
+                spec("System", ProcessInfo.processInfo.operatingSystemVersionString.replacingOccurrences(of: "Version ", with: ""), "apple.logo")
+                spec("Memory", ByteCountFormatter.string(fromByteCount: Int64(ProcessInfo.processInfo.physicalMemory), countStyle: .memory), "memorychip")
+                spec("Processor", "\(ProcessInfo.processInfo.processorCount) cores", "cpu")
+                spec("Display", DeviceDetails.display, "display")
+                spec("Uptime", model.system.uptime, "clock.arrow.circlepath")
+            }
+        }
+    }
+    private func spec(_ title: String, _ value: String, _ icon: String) -> some View {
+        HStack(spacing: 12) { Image(systemName: icon).font(.title3).foregroundStyle(Color(hex: palette.accent)).frame(width: 28); VStack(alignment: .leading, spacing: 2) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(.system(size: 14, weight: .semibold, design: .rounded)).lineLimit(1) }; Spacer() }.padding(15).background(Color(hex: palette.surface).opacity(0.58)).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: palette.muted).opacity(0.18)))
+    }
+}
+
+private enum DeviceDetails {
+    static var model: String { sysctlString("hw.model") ?? Host.current().localizedName ?? "Mac" }
+    static var display: String { guard let screen = NSScreen.main else { return "Unknown" }; return "\(Int(screen.frame.width)) × \(Int(screen.frame.height))" }
+    private static func sysctlString(_ name: String) -> String? {
+        var size = 0; guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+        var value = [CChar](repeating: 0, count: size); guard sysctlbyname(name, &value, &size, nil, 0) == 0 else { return nil }
+        return String(cString: value)
     }
 }
 
@@ -124,19 +164,16 @@ private struct BarStylePreview: View {
         Button { model.applyBarStyle(style) } label: {
             VStack(alignment: .leading, spacing: 8) {
                 GeometryReader { proxy in
-                    let sourceWidth: CGFloat = 760
+                    let sourceWidth: CGFloat = 680
                     let scale = proxy.size.width / sourceWidth
                     ZStack(alignment: .topLeading) {
                         LinearGradient(colors: [Color(hex: preview.palette.muted).opacity(0.3), Color(hex: preview.palette.background).opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        BarView(model: model, notchWidth: preview.reserveNotchSpace && !preview.notchMaskEnabled ? 122 : 0, topReservedHeight: preview.notchMaskEnabled ? 32 : 0, configurationOverride: preview)
-                            .frame(width: sourceWidth, height: preview.height + preview.outerInset * 2 + (preview.notchMaskEnabled ? 32 : 0))
+                        BarView(model: model, notchWidth: 0, topReservedHeight: 0, configurationOverride: preview)
+                            .frame(width: sourceWidth, height: preview.height + preview.outerInset * 2)
                             .scaleEffect(scale, anchor: .topLeading).allowsHitTesting(false)
-                        if preview.reserveNotchSpace && !preview.notchMaskEnabled {
-                            RoundedRectangle(cornerRadius: 10).fill(.black).frame(width: 118, height: 34).offset(x: (sourceWidth - 118) / 2, y: -10).scaleEffect(scale, anchor: .topLeading)
-                        }
                     }.clipped()
                 }
-                .frame(height: 58)
+                .frame(height: 82)
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 Text(style.rawValue).font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
                 Text(style.subtitle).font(.caption2).foregroundStyle(.secondary)
@@ -156,7 +193,7 @@ struct BarSettingsView: View {
             Text("This is the same renderer and configuration used on the desktop. It is shown at 1:1 point size; scroll horizontally to inspect the complete display-width layout.").font(.caption).foregroundStyle(.secondary)
         }
         SettingsGroup("Style library") {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
                 ForEach(BuiltInBarStyle.allCases) { style in BarStylePreview(model: model, style: style) }
             }
             Divider()
@@ -399,7 +436,7 @@ struct TilingSettingsView: View {
             Text("One bundle identifier per line. Matching applications remain floating.").font(.caption).foregroundStyle(.secondary)
             TextEditor(text: Binding(get: { model.configuration.tiling.ignoredBundleIDs.joined(separator: "\n") }, set: { model.configuration.tiling.ignoredBundleIDs = $0.components(separatedBy: .newlines).filter { !$0.isEmpty } })).font(.system(.body, design: .monospaced)).frame(minHeight: 110)
         }
-        Text("Hyprland dwindle recursively splits the remaining leaf along its longest axis. Hyprshell manages only visible, resizable standard windows on the current Mission Control desktop; dialogs, sheets, fullscreen windows, other Spaces, and excluded apps remain floating. macOS Accessibility permission is required.").font(.caption).foregroundStyle(.secondary)
+        Text("Hyprland dwindle recursively splits the remaining leaf along its longest axis. Ryft manages only visible, resizable standard windows on the current Mission Control desktop; dialogs, sheets, fullscreen windows, other Spaces, and excluded apps remain floating. macOS Accessibility permission is required.").font(.caption).foregroundStyle(.secondary)
     }
 }
 

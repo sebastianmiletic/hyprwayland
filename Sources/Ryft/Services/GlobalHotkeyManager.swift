@@ -33,7 +33,7 @@ final class GlobalHotkeyManager {
             DispatchQueue.main.async { manager.invoke(shortcut) }
             return noErr
         }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handler)
-        if status != noErr { NSLog("Hyprshell could not install the global hotkey handler (OSStatus %d)", status) }
+        if status != noErr { NSLog("Ryft could not install the global hotkey handler (OSStatus %d)", status) }
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + .milliseconds(100), repeating: .milliseconds(30), leeway: .milliseconds(5))
         timer.setEventHandler { [weak self] in self?.pollKeyboard() }
@@ -65,8 +65,8 @@ final class GlobalHotkeyManager {
             var ref: EventHotKeyRef?
             let id = EventHotKeyID(signature: Self.signature, id: idValue)
             let status = RegisterEventHotKey(UInt32(code), UInt32(optionKey), id, GetEventDispatcherTarget(), 0, &ref)
-            if status == noErr, let ref { refs.append(ref); systemShortcuts[idValue] = shortcut; NSLog("Hyprshell registered system-wide shortcut %@", shortcut.display) }
-            else { NSLog("Hyprshell could not register system-wide shortcut %@ (OSStatus %d)", shortcut.display, status) }
+            if status == noErr, let ref { refs.append(ref); systemShortcuts[idValue] = shortcut; NSLog("Ryft registered system-wide shortcut %@", shortcut.display) }
+            else { NSLog("Ryft could not register system-wide shortcut %@ (OSStatus %d)", shortcut.display, status) }
             combinations.insert("\(code)-\(UInt32(optionKey))")
         }
         // Workspace navigation is intentionally fixed and global, matching the
@@ -92,8 +92,8 @@ final class GlobalHotkeyManager {
             let hotkeyID = UInt32(index + 1)
             let id = EventHotKeyID(signature: Self.signature, id: hotkeyID)
             let status = RegisterEventHotKey(UInt32(code), modifiers, id, GetEventDispatcherTarget(), 0, &ref)
-            if status == noErr, let ref { refs.append(ref); registeredShortcuts[hotkeyID] = shortcut; NSLog("Hyprshell registered global shortcut %@ for %@", shortcut.display, shortcut.action.rawValue) }
-            else { NSLog("Hyprshell could not register global shortcut %@ (OSStatus %d)", shortcut.display, status) }
+            if status == noErr, let ref { refs.append(ref); registeredShortcuts[hotkeyID] = shortcut; NSLog("Ryft registered global shortcut %@ for %@", shortcut.display, shortcut.action.rawValue) }
+            else { NSLog("Ryft could not register global shortcut %@ (OSStatus %d)", shortcut.display, status) }
         }
     }
 
@@ -114,15 +114,15 @@ final class GlobalHotkeyManager {
             return Unmanaged.passUnretained(event)
         }
         eventTap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly, eventsOfInterest: mask, callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque())
-        if eventTap == nil, !CGPreflightListenEventAccess(), !UserDefaults.standard.bool(forKey: "HyprshellRequestedInputMonitoring") {
-            UserDefaults.standard.set(true, forKey: "HyprshellRequestedInputMonitoring")
+        if eventTap == nil, !CGPreflightListenEventAccess(), !UserDefaults.standard.bool(forKey: "RyftRequestedInputMonitoring") {
+            UserDefaults.standard.set(true, forKey: "RyftRequestedInputMonitoring")
             _ = CGRequestListenEventAccess()
             eventTap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly, eventsOfInterest: mask, callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque())
         }
-        guard let eventTap else { NSLog("Hyprshell global event tap is unavailable; enable Input Monitoring for Hyprshell") ; return }
+        guard let eventTap else { NSLog("Ryft global event tap is unavailable; enable Input Monitoring for Ryft") ; return }
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0); eventTapSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes); CGEvent.tapEnable(tap: eventTap, enable: true)
-        NSLog("Hyprshell global event tap enabled")
+        NSLog("Ryft global event tap enabled")
     }
 
     private func handleGlobalKey(code: Int, option: Bool, command: Bool, control: Bool, shift: Bool) {
@@ -169,7 +169,7 @@ final class GlobalHotkeyManager {
     private func invoke(_ shortcut: ShortcutConfiguration) {
         let invocationKey = shortcut.action.rawValue + "|" + shortcut.display
         if let lastInvocation, lastInvocation.0 == invocationKey, Date().timeIntervalSince(lastInvocation.1) < 0.18 { return }
-        lastInvocation = (invocationKey, Date()); NSLog("Hyprshell received global shortcut %@", shortcut.display); onShortcut?(shortcut)
+        lastInvocation = (invocationKey, Date()); NSLog("Ryft received global shortcut %@", shortcut.display); onShortcut?(shortcut)
     }
 
     private func clear() { refs.forEach { UnregisterEventHotKey($0) }; refs.removeAll(); registeredShortcuts.removeAll(); systemShortcuts.removeAll() }

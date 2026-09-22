@@ -2,9 +2,9 @@
 
 ## Feasibility boundary
 
-macOS does not expose a supported API for replacing, retiming, or skinning the native Mission Control four-finger Space animation. A normal application cannot turn that system animation off, receive its interactive progress, or substitute compositor frames. Hyprshell should not claim otherwise.
+macOS does not expose a supported API for replacing, retiming, or skinning the native Mission Control four-finger Space animation. A normal application cannot turn that system animation off, receive its interactive progress, or substitute compositor frames. Ryft should not claim otherwise.
 
-The supported product scope is a Hyprshell-owned transition for desktop switches initiated by Hyprshell: workspace buttons, global keybinds, and Control+number actions. Native trackpad switching will keep Apple's animation. An experimental private-API compositor hook is explicitly out of scope because it would be fragile across macOS releases and unsuitable for a dependable utility.
+The supported product scope is a Ryft-owned transition for desktop switches initiated by Ryft: workspace buttons, global keybinds, and Control+number actions. Native trackpad switching will keep Apple's animation. An experimental private-API compositor hook is explicitly out of scope because it would be fragile across macOS releases and unsuitable for a dependable utility.
 
 ## Intended experience
 
@@ -15,7 +15,7 @@ The supported product scope is a Hyprshell-owned transition for desktop switches
 - The overlay is removed as soon as the destination Space is confirmed.
 - Default duration target: 180 to 220 ms.
 - Reduce Motion replaces translation with a 100 ms crossfade or no transition.
-- If capture permission, a destination frame, or timing confirmation is unavailable, Hyprshell falls back to the native switch without delaying input.
+- If capture permission, a destination frame, or timing confirmation is unavailable, Ryft falls back to the native switch without delaying input.
 
 ## Architecture
 
@@ -78,7 +78,7 @@ Repeated next/previous commands update the queued destination rather than spawni
 
 Add a **Workspace transitions** section under General or Tiling:
 
-- Enable Hyprshell transitions
+- Enable Ryft transitions
 - Style: Slide, Hyprland slide, Fade, Instant
 - Duration: 100 to 350 ms
 - Animate direction from workspace order
@@ -90,7 +90,7 @@ Add a **Workspace transitions** section under General or Tiling:
 
 - Overlay windows prewarmed at launch.
 - No synchronous capture or image decoding on the main thread.
-- First visible response within one display frame after a Hyprshell workspace command.
+- First visible response within one display frame after a Ryft workspace command.
 - 60 fps minimum, 120 fps on ProMotion where the system allows it.
 - Peak temporary capture memory bounded to two frames per active display.
 - No retained screenshots after cleanup.
@@ -107,8 +107,8 @@ Test:
 - Reduce Motion
 - missing and revoked Screen Recording permission
 - sleep/wake and display hot-plugging
-- animation cancellation when Hyprshell quits or tiling is disabled
+- animation cancellation when Ryft quits or tiling is disabled
 
 ## Acceptance boundary
 
-Hyprshell can make its own workspace commands look different and feel immediate. It cannot safely alter the actual Apple four-finger Mission Control animation. Any future exploration of that exact system gesture must be clearly marked experimental and cannot be the default product path.
+Ryft can make its own workspace commands look different and feel immediate. It cannot safely alter the actual Apple four-finger Mission Control animation. Any future exploration of that exact system gesture must be clearly marked experimental and cannot be the default product path.

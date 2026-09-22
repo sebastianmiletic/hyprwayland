@@ -47,9 +47,9 @@ struct ShortcutSettingsView: View {
     }
     private func test(_ shortcut: ShortcutConfiguration) {
         switch shortcut.action {
-        case .wallpaper: NotificationCenter.default.post(name: .hyprshellShowWallpapers, object: nil)
+        case .wallpaper: NotificationCenter.default.post(name: .ryftShowWallpapers, object: nil)
         case .toggleBar: model.configuration.bar.enabled.toggle()
-        case .settings: NotificationCenter.default.post(name: .hyprshellShowSettings, object: nil)
+        case .settings: NotificationCenter.default.post(name: .ryftShowSettings, object: nil)
         case .randomWallpaper: model.randomWallpaper()
         case .tileWindows: model.tiling.tileNow()
         case .focusNextWindow: model.tiling.focusNext()
@@ -58,8 +58,8 @@ struct ShortcutSettingsView: View {
         case .openApplication: if let path = shortcut.target { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
         case .runCommand:
             if let command = shortcut.target, !command.isEmpty { let process = Process(); process.executableURL = URL(fileURLWithPath: "/bin/zsh"); process.arguments = ["-lc", command]; try? process.run() }
-        case .leftSidebar: NotificationCenter.default.post(name: .hyprshellToggleLeftSidebar, object: nil)
-        case .rightSidebar: NotificationCenter.default.post(name: .hyprshellToggleRightSidebar, object: nil)
+        case .leftSidebar: NotificationCenter.default.post(name: .ryftToggleLeftSidebar, object: nil)
+        case .rightSidebar: NotificationCenter.default.post(name: .ryftToggleRightSidebar, object: nil)
         case .quitFrontmost: _ = NSWorkspace.shared.frontmostApplication?.terminate()
         }
     }
@@ -100,7 +100,7 @@ struct WallpaperGalleryView: View {
     private var toolbar: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 1) {
-                Text("HYPRSHELL").font(.caption2.weight(.bold)).tracking(2).foregroundStyle(Color(hex: palette.accent))
+                Text("RYFT").font(.caption2.weight(.bold)).tracking(2).foregroundStyle(Color(hex: palette.accent))
                 Text("Wallpaper library").font(.title3.weight(.semibold))
             }.frame(width: 170, alignment: .leading)
             toolbarButton("house.fill", selected: model.wallpaperViewMode == 0) { model.wallpaperViewMode = 0 }
@@ -162,7 +162,7 @@ struct WallpaperGalleryView: View {
         VStack(spacing: 10) {
             Image(systemName: model.wallpaperViewMode == 2 ? "heart.slash" : "photo.on.rectangle.angled").font(.system(size: 38))
             Text(model.wallpaperViewMode == 2 ? "No favorite wallpapers" : "No wallpapers found").font(.headline)
-            if standalone { Text("Add wallpaper folders in Hyprshell Settings.").font(.caption) }
+            if standalone { Text("Add wallpaper folders in Ryft Settings.").font(.caption) }
             else { HStack { Button("Add wallpaper folder") { model.addWallpaperFolder() }; Button("Install GitHub collection") { model.installWallpaperArchive() }.disabled(model.installingWallpaperArchive) } }
             if !model.wallpaperArchiveStatus.isEmpty { Text(model.wallpaperArchiveStatus).font(.caption) }
         }
@@ -228,19 +228,19 @@ struct GeneralSettingsView: View {
     @ObservedObject var model: AppModel
     var body: some View {
         SettingsGroup("Startup") {
-            Toggle("Launch Hyprshell at login", isOn: Binding(get: { model.configuration.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
-            Text("Login registration works after Hyprshell is installed as an application bundle.").font(.caption).foregroundStyle(.secondary)
+            Toggle("Launch Ryft at login", isOn: Binding(get: { model.configuration.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
+            Text("Login registration works after Ryft is installed as an application bundle.").font(.caption).foregroundStyle(.secondary)
         }
         SettingsGroup("Profiles and saving") {
             HStack { Button("Save now") { model.save() }; Button("Import profile") { model.importProfile() }; Button("Export profile") { model.exportProfile() }; Spacer(); Button("Reset defaults", role: .destructive) { model.reset() } }
             Label("Every change is saved automatically", systemImage: "checkmark.circle.fill").foregroundStyle(Color(hex: model.configuration.bar.palette.success))
-            Text("Saved to ~/Library/Application Support/Hyprshell/config.json. Profiles include the bar, widgets, blur, colors, shortcuts, favorites, tasks, and wallpaper sources.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            Text("Saved to ~/Library/Application Support/Ryft/config.json. Profiles include the bar, widgets, blur, colors, shortcuts, favorites, tasks, and wallpaper sources.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
         SettingsGroup("Desktop integration") {
             LabeledContent("Global shortcut", value: "Option + W")
             LabeledContent("Bar engine", value: "Native AppKit + SwiftUI")
             LabeledContent("Imported preset", value: "Sebastian II")
-            Text("Sebastian II is ported from github.com/sebastianmiletic/hyprland-dotfiles at commit bb7de91. The upstream desktop uses Quickshell, not Waybar, so Hyprshell maps its layout and palette to native macOS modules.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            Text("Sebastian II is ported from github.com/sebastianmiletic/hyprland-dotfiles at commit bb7de91. The upstream desktop uses Quickshell, not Waybar, so Ryft maps its layout and palette to native macOS modules.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
     }
 }

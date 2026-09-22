@@ -34,7 +34,7 @@ struct LeftSidebarView: View {
             VStack(spacing: 12) {
                 HStack(spacing: 10) {
                     ZStack { Circle().fill(Color(hex: palette.accent)); Image(systemName: "sparkles").foregroundStyle(Color(hex: palette.background)) }.frame(width: 34, height: 34)
-                    VStack(alignment: .leading, spacing: 1) { Text("Gemini").font(.system(size: 16, weight: .semibold, design: .rounded)); Text("Hyprshell assistant").font(.caption).foregroundStyle(Color(hex: palette.muted)) }
+                    VStack(alignment: .leading, spacing: 1) { Text("Gemini").font(.system(size: 16, weight: .semibold, design: .rounded)); Text(gemini.currentModelName).font(.caption).foregroundStyle(Color(hex: palette.muted)).lineLimit(1) }
                     Spacer()
                     Circle().fill(gemini.hasAPIKey ? Color(hex: palette.success) : Color(hex: palette.muted)).frame(width: 7, height: 7)
                 }.padding(.trailing, 34)
@@ -42,7 +42,7 @@ struct LeftSidebarView: View {
                 if !gemini.hasAPIKey { keySetup }
                 else { conversation }
             }
-        }
+        }.onAppear { gemini.refreshCredentialState() }
     }
 
     private var keySetup: some View {
@@ -50,7 +50,7 @@ struct LeftSidebarView: View {
             Spacer()
             Image(systemName: "key.fill").font(.system(size: 28)).foregroundStyle(Color(hex: palette.accent))
             Text("Connect Gemini").font(.title2.weight(.semibold))
-            Text("Paste a Google AI Studio API key. It is stored only in your macOS Keychain and is never written to Hyprshell’s config or repository.").foregroundStyle(Color(hex: palette.muted))
+            Text("Paste a Google AI Studio API key. It is stored only in your macOS Keychain and is never written to Ryft’s config or repository.").foregroundStyle(Color(hex: palette.muted))
             SecureField("Gemini API key", text: $gemini.apiKeyDraft).textFieldStyle(.plain).onSubmit { gemini.saveAPIKey() }
                 .padding(12).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 12))
             Button("Save securely") { gemini.saveAPIKey() }.buttonStyle(.borderedProminent).tint(Color(hex: palette.accent))
@@ -60,14 +60,18 @@ struct LeftSidebarView: View {
     }
 
     private var conversation: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
+            modelUsage
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 10) {
                         ForEach(gemini.messages) { message in
                             HStack {
                                 if message.role == "user" { Spacer(minLength: 42) }
-                                Text(message.text).textSelection(.enabled).padding(.horizontal, 12).padding(.vertical, 10)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(message.text).textSelection(.enabled)
+                                    if message.role == "model", let id = message.model { Text(id).font(.system(size: 8, weight: .medium, design: .monospaced)).opacity(0.55) }
+                                }.padding(.horizontal, 12).padding(.vertical, 10)
                                     .background(Color(hex: message.role == "user" ? palette.accent : palette.surface))
                                     .foregroundStyle(Color(hex: message.role == "user" ? palette.background : palette.foreground))
                                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -83,7 +87,17 @@ struct LeftSidebarView: View {
                 TextField("Message Gemini", text: $gemini.draft, axis: .vertical).textFieldStyle(.plain).lineLimit(1...5).onSubmit { gemini.send() }
                 Button { gemini.send() } label: { Image(systemName: "arrow.up").fontWeight(.bold).frame(width: 30, height: 30).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(Circle()) }.buttonStyle(.plain).disabled(gemini.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || gemini.isLoading)
             }.padding(10).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 15))
-            HStack { Button("Remove API key", role: .destructive) { gemini.removeAPIKey() }.buttonStyle(.plain).font(.caption); Spacer(); Text("⌥A").font(.caption.monospaced()).foregroundStyle(Color(hex: palette.muted)) }
+            HStack { Button("Remove API key", role: .destructive) { gemini.removeAPIKey() }.buttonStyle(.plain).font(.caption); Spacer(); if gemini.inputTokens + gemini.outputTokens > 0 { Text("\(gemini.inputTokens) in · \(gemini.outputTokens) out").font(.caption2.monospacedDigit()).foregroundStyle(Color(hex: palette.muted)) }; Text("⌥A").font(.caption.monospaced()).foregroundStyle(Color(hex: palette.muted)) }
+        }
+    }
+    private var modelUsage: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 5) {
+            ForEach(gemini.modelUsages) { usage in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) { Circle().fill(usage.id == gemini.currentModelID ? Color(hex: palette.success) : Color(hex: palette.muted).opacity(0.45)).frame(width: 5, height: 5); Text(usage.name.replacingOccurrences(of: "Gemini ", with: "")).font(.system(size: 9, weight: .semibold)).lineLimit(1); Spacer(); Text("\(usage.used)/\(usage.quota)").font(.system(size: 8, design: .monospaced)) }
+                    GeometryReader { proxy in Capsule().fill(Color(hex: palette.accent)).frame(width: proxy.size.width * CGFloat(usage.used) / CGFloat(max(usage.quota, 1))) }.frame(height: 2).background(Color(hex: palette.muted).opacity(0.2)).clipShape(Capsule())
+                }.padding(.horizontal, 7).padding(.vertical, 5).background(Color(hex: palette.surface).opacity(0.7)).clipShape(RoundedRectangle(cornerRadius: 8))
+            }
         }
     }
 }
@@ -120,7 +134,7 @@ struct RightSidebarView: View {
             Spacer()
             HStack(spacing: 2) {
                 iconButton("arrow.clockwise") { system.refresh() }
-                iconButton("gearshape") { NotificationCenter.default.post(name: .hyprshellShowSettings, object: nil); close() }
+                iconButton("gearshape") { NotificationCenter.default.post(name: .ryftShowSettings, object: nil); close() }
                 iconButton("power") { model.openSystemSettings("preference.security") }
             }.padding(4).background(Color(hex: palette.surface)).clipShape(Capsule())
         }.padding(.trailing, 34)
@@ -144,7 +158,7 @@ struct RightSidebarView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack { Text("Notifications").font(.headline); Spacer(); Text(notifications.authorizationStatus).font(.caption).foregroundStyle(Color(hex: palette.muted)) }
             if notifications.recent.isEmpty {
-                Text("Battery and Hyprshell alerts appear here. Messages and alerts from other apps remain private in macOS Notification Center.").font(.caption).foregroundStyle(Color(hex: palette.muted))
+                Text("Battery and Ryft alerts appear here. Messages and alerts from other apps remain private in macOS Notification Center.").font(.caption).foregroundStyle(Color(hex: palette.muted))
             } else {
                 ForEach(notifications.recent.prefix(3)) { item in
                     HStack(alignment: .top, spacing: 8) { Image(systemName: "bell.fill").foregroundStyle(Color(hex: palette.accent)); VStack(alignment: .leading, spacing: 2) { Text(item.title).fontWeight(.semibold); Text(item.message).font(.caption).foregroundStyle(Color(hex: palette.muted)) }; Spacer() }
@@ -215,7 +229,7 @@ struct RightSidebarView: View {
             Text(controls.batteryPercent).font(.system(size: 34, weight: .semibold, design: .rounded))
             Toggle("Low Power Mode", isOn: Binding(get: { controls.lowPowerMode }, set: { controls.setLowPowerMode($0) }))
                 .padding(14).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 14))
-            Text("macOS requires administrator approval when changing Low Power Mode. Hyprshell uses pmset and shows the standard system authorization prompt.").font(.caption).foregroundStyle(Color(hex: palette.muted)).multilineTextAlignment(.center)
+            Text("macOS requires administrator approval when changing Low Power Mode. Ryft uses pmset and shows the standard system authorization prompt.").font(.caption).foregroundStyle(Color(hex: palette.muted)).multilineTextAlignment(.center)
             Button("Open Battery Settings") { model.openSystemSettings("Battery-Settings.extension") }.buttonStyle(.bordered)
             Spacer()
         }.padding(.top, 30)

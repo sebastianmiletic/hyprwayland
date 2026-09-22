@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Hyprshell",
+    name: "Ryft",
     platforms: [.macOS(.v13)],
-    products: [.executable(name: "Hyprshell", targets: ["Hyprshell"])],
+    products: [.executable(name: "Ryft", targets: ["Ryft"])],
     targets: [
         .executableTarget(
-            name: "Hyprshell",
+            name: "Ryft",
             resources: [.process("Resources")],
             linkerSettings: [
                 .linkedFramework("AppKit"),

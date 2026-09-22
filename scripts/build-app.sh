@@ -4,18 +4,18 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 swift build -c release
-APP="$ROOT/dist/Hyprshell.app"
+APP="$ROOT/dist/Ryft.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/Hyprshell "$APP/Contents/MacOS/Hyprshell"
-cp -R .build/release/Hyprshell_Hyprshell.bundle "$APP/Contents/Resources/Hyprshell_Hyprshell.bundle"
+cp .build/release/Ryft "$APP/Contents/MacOS/Ryft"
+cp -R .build/release/Ryft_Ryft.bundle "$APP/Contents/Resources/Ryft_Ryft.bundle"
 cp Info.plist "$APP/Contents/Info.plist"
-cp Assets/Hyprshell.icns "$APP/Contents/Resources/Hyprshell.icns"
-chmod +x "$APP/Contents/MacOS/Hyprshell"
+cp Assets/Ryft.icns "$APP/Contents/Resources/Ryft.icns"
+chmod +x "$APP/Contents/MacOS/Ryft"
 # A stable identity keeps macOS TCC grants attached across local updates. An
 # ad-hoc signature changes its code requirement every build and can cause
 # Accessibility and Automation to appear to be requested again.
-SIGNING_IDENTITY="${HYPRSHELL_SIGNING_IDENTITY:-Termatica Release Signing}"
+SIGNING_IDENTITY="${RYFT_SIGNING_IDENTITY:-Termatica Release Signing}"
 if security find-identity -v -p codesigning | grep -Fq "\"$SIGNING_IDENTITY\""; then
   codesign --force --deep --options runtime --sign "$SIGNING_IDENTITY" "$APP"
 else

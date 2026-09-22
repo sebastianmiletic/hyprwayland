@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-09-22T09:30:00Z",
-  "title": "Design System: Hyprshell",
+  "title": "Design System: Ryft",
   "extensions": {
     "colorMeta": {
       "charred-plum": { "role": "neutral", "displayName": "Charred Plum", "canonical": "#141313", "tonalRamp": ["#141313", "#242121", "#3A3636", "#524D4D", "#716B6B", "#948D8D", "#BBB4B4", "#E6E1E1"] },
@@ -31,7 +31,7 @@
       "kind": "nav",
       "refersTo": "desktop-bar",
       "description": "The persistent native desktop status and workspace surface.",
-      "html": "<nav class=\"ds-bar\"><strong>Hyprshell</strong><div class=\"ds-workspaces\"><button class=\"ds-active\">1</button><button>2</button><button>3</button></div><span>Wi-Fi&nbsp;&nbsp;82%</span></nav>",
+      "html": "<nav class=\"ds-bar\"><strong>Ryft</strong><div class=\"ds-workspaces\"><button class=\"ds-active\">1</button><button>2</button><button>3</button></div><span>Wi-Fi&nbsp;&nbsp;82%</span></nav>",
       "css": ".ds-bar{height:38px;padding:0 12px;border:1px solid rgba(148,143,148,.22);border-radius:17px;background:#141313;color:#e6e1e1;display:flex;align-items:center;justify-content:space-between;font:600 12px -apple-system,sans-serif}.ds-workspaces{display:flex;gap:2px;padding:3px;border-radius:999px;background:#2d2a2f}.ds-workspaces button{width:24px;height:24px;border:0;border-radius:50%;background:transparent;color:#948f94}.ds-workspaces .ds-active{background:#cbc4cb;color:#141313}.ds-workspaces button:focus-visible{outline:2px solid #cbc4cb;outline-offset:2px}"
     },
     {
@@ -52,7 +52,7 @@
   ],
   "narrative": {
     "northStar": "The Native Rice Workbench",
-    "overview": "Hyprshell feels like a carefully tuned desktop environment that obeys macOS conventions. The persistent bar is compact and expressive; the editor is calm and familiar.",
+    "overview": "Ryft feels like a carefully tuned desktop environment that obeys macOS conventions. The persistent bar is compact and expressive; the editor is calm and familiar.",
     "keyCharacteristics": ["A dense, rounded bar paired with a quiet native editor.", "Native safe areas and symmetric split surfaces keep widgets clear of the MacBook notch.", "A menu-bar status item and desktop-bar gear keep settings reachable without a Dock icon.", "Four reorderable widget zones provide exact placement.", "Immediate live feedback for every visual change.", "Muted mineral color with rare, meaningful state emphasis.", "Familiar macOS controls and keyboard access."],
     "rules": [
       { "name": "The Earned Accent Rule", "body": "Accent marks selection or action. It is never ambient decoration.", "section": "colors" },

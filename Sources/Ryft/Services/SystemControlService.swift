@@ -53,14 +53,14 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     }
 
     func requestWiFiAccessAndScan() {
-        // Never trigger Core Location's sheet from a Wi-Fi click. If the user
-        // has already granted access, scan normally; otherwise keep the basic
-        // Wi-Fi toggle/status useful without repeatedly asking.
         switch locationManager.authorizationStatus {
         case .authorized, .authorizedAlways: scanWiFi()
-        case .notDetermined: operationMessage = "Nearby network names need Location access. Hyprshell will not ask automatically."
-        case .denied, .restricted: operationMessage = "Nearby network names are unavailable; Wi-Fi controls still work."
-        @unknown default: operationMessage = "Nearby network names are unavailable."
+        case .notDetermined:
+            let key = "RyftRequestedWiFiLocation"
+            if !UserDefaults.standard.bool(forKey: key) { UserDefaults.standard.set(true, forKey: key); locationManager.requestAlwaysAuthorization() }
+            else { operationMessage = "Allow Location once to list nearby Wi-Fi networks." }
+        case .denied, .restricted: operationMessage = "Allow Location in Privacy & Security to list nearby Wi-Fi networks."
+        @unknown default: operationMessage = "Nearby Wi-Fi networks are unavailable."
         }
     }
 

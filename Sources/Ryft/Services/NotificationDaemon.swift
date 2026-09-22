@@ -2,18 +2,18 @@ import AppKit
 import Combine
 import UserNotifications
 
-struct HyprshellNotification: Identifiable {
+struct RyftNotification: Identifiable {
     let id = UUID()
     let title: String
     let message: String
     let date = Date()
 }
 
-/// Emits Hyprshell-owned system notifications without repeatedly asking for
+/// Emits Ryft-owned system notifications without repeatedly asking for
 /// authorization. macOS does not expose another app's Notification Center
 /// history, so Messages and other app alerts remain owned by the system.
 final class NotificationDaemon: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
-    @Published private(set) var recent: [HyprshellNotification] = []
+    @Published private(set) var recent: [RyftNotification] = []
     @Published private(set) var authorizationStatus = "Checking…"
 
     private let controls: SystemControlService
@@ -36,7 +36,7 @@ final class NotificationDaemon: NSObject, ObservableObject, UNUserNotificationCe
             guard let self else { return }
             DispatchQueue.main.async { self.authorizationStatus = self.label(settings.authorizationStatus) }
             // Permission prompts are never triggered at launch. macOS owns this
-            // decision; Hyprshell only uses an existing grant.
+            // decision; Ryft only uses an existing grant.
         }
     }
 
@@ -51,7 +51,7 @@ final class NotificationDaemon: NSObject, ObservableObject, UNUserNotificationCe
     }
 
     func post(title: String, message: String, sound: Bool = true) {
-        let item = HyprshellNotification(title: title, message: message)
+        let item = RyftNotification(title: title, message: message)
         DispatchQueue.main.async {
             self.recent.insert(item, at: 0)
             if self.recent.count > 20 { self.recent.removeLast(self.recent.count - 20) }

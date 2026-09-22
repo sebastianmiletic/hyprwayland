@@ -10,7 +10,7 @@
     ".config/quickshell/ii/services/Wallpapers.qml",
     ".config/hypr/custom/keybinds.lua"
   ],
-  "note": "The repository uses Illogical Impulse Quickshell, not Waybar. Hyprshell ports the structure and behavior to AppKit and SwiftUI because QML Wayland panels cannot run on macOS.",
+  "note": "The repository uses Illogical Impulse Quickshell, not Waybar. Ryft ports the structure and behavior to AppKit and SwiftUI because QML Wayland panels cannot run on macOS.",
   "mappedModules": ["left-sidebar", "active-window", "resources", "workspaces", "clock", "wifi", "volume", "battery", "right-sidebar", "settings"],
   "mappedShortcut": "SUPER + W -> Option + W -> wallpaper gallery"
 }

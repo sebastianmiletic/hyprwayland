@@ -7,9 +7,9 @@ import CoreWLAN
 final class AppModel: ObservableObject {
     static let shared = AppModel()
 
-    @Published var configuration: HyprshellConfiguration
+    @Published var configuration: RyftConfiguration
     @Published var wallpapers: [URL] = []
-    @Published var selectedSection: AppSection = .bar
+    @Published var selectedSection: AppSection = .home
     @Published var barProfileName = "My bar"
     @Published var selectedWorkspace = 1
     @Published var selectedEditorWidget: UUID?
@@ -46,20 +46,34 @@ final class AppModel: ObservableObject {
     private let configURL: URL
 
     private init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Hyprshell", isDirectory: true)
+        let baseSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let support = baseSupport.appendingPathComponent("Ryft", isDirectory: true)
         try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         configURL = support.appendingPathComponent("config.json")
-        if let data = try? Data(contentsOf: configURL), let decoded = try? JSONDecoder().decode(HyprshellConfiguration.self, from: data) {
+        let legacyNames = ["Hypr" + "shell", "Way" + "code"]
+        if !FileManager.default.fileExists(atPath: configURL.path) {
+            for name in legacyNames {
+                let legacy = baseSupport.appendingPathComponent(name, isDirectory: true)
+                let oldConfig = legacy.appendingPathComponent("config.json")
+                if FileManager.default.fileExists(atPath: oldConfig.path) { try? FileManager.default.copyItem(at: oldConfig, to: configURL) }
+                let oldWallpapers = legacy.appendingPathComponent("Wallpapers", isDirectory: true)
+                let newWallpapers = support.appendingPathComponent("Wallpapers", isDirectory: true)
+                if FileManager.default.fileExists(atPath: oldWallpapers.path), !FileManager.default.fileExists(atPath: newWallpapers.path) { try? FileManager.default.copyItem(at: oldWallpapers, to: newWallpapers) }
+                if FileManager.default.fileExists(atPath: configURL.path) { break }
+            }
+        }
+        if let data = try? Data(contentsOf: configURL), let decoded = try? JSONDecoder().decode(RyftConfiguration.self, from: data) {
             configuration = decoded
         } else {
-            configuration = HyprshellConfiguration()
+            configuration = RyftConfiguration()
         }
-        // Carry paths forward from the previous application-support directory.
-        let legacyName = "Way" + "code"
-        let legacyPrefix = support.deletingLastPathComponent().appendingPathComponent(legacyName).path + "/"
+        // Carry paths forward from previous application-support directories.
+        let legacyPrefixes = legacyNames.map { baseSupport.appendingPathComponent($0).path + "/" }
         let currentPrefix = support.path + "/"
-        func migratedPath(_ path: String) -> String { path.hasPrefix(legacyPrefix) ? currentPrefix + path.dropFirst(legacyPrefix.count) : path }
+        func migratedPath(_ path: String) -> String {
+            guard let prefix = legacyPrefixes.first(where: path.hasPrefix) else { return path }
+            return currentPrefix + path.dropFirst(prefix.count)
+        }
         configuration.wallpaperFolders = configuration.wallpaperFolders.map(migratedPath)
         configuration.wallpaperFiles = configuration.wallpaperFiles.map(migratedPath)
         configuration.favoriteWallpapers = configuration.favoriteWallpapers.map(migratedPath)
@@ -173,7 +187,7 @@ final class AppModel: ObservableObject {
             } else { configuration.shortcuts.append(ShortcutConfiguration(action: action, key: key)) }
         }
         if !configuration.bar.widgets.contains(where: { $0.kind == .settings || $0.clickAction == .settings }) {
-            configuration.bar.widgets.append(WidgetConfiguration(kind: .settings, name: "Hyprshell settings", placement: .trailing, icon: "gearshape.fill", showLabel: false, clickAction: .settings))
+            configuration.bar.widgets.append(WidgetConfiguration(kind: .settings, name: "Ryft settings", placement: .trailing, icon: "gearshape.fill", showLabel: false, clickAction: .settings))
         }
         $configuration.dropFirst().debounce(for: .milliseconds(180), scheduler: RunLoop.main).sink { [weak self] value in
             self?.save(value)
@@ -187,7 +201,7 @@ final class AppModel: ObservableObject {
         save()
     }
 
-    func save(_ value: HyprshellConfiguration? = nil) {
+    func save(_ value: RyftConfiguration? = nil) {
         do {
             let data = try JSONEncoder.pretty.encode(value ?? configuration)
             try data.write(to: configURL, options: .atomic)
@@ -195,7 +209,7 @@ final class AppModel: ObservableObject {
         } catch { statusMessage = "Could not save: \(error.localizedDescription)" }
     }
 
-    func reset() { configuration = HyprshellConfiguration() }
+    func reset() { configuration = RyftConfiguration() }
 
     func barConfiguration(for style: BuiltInBarStyle) -> BarConfiguration {
         var bar = configuration.bar
@@ -216,7 +230,7 @@ final class AppModel: ObservableObject {
 
     func exportProfile() {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "Hyprshell-profile.json"
+        panel.nameFieldStringValue = "Ryft-profile.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
@@ -230,7 +244,7 @@ final class AppModel: ObservableObject {
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            configuration = try JSONDecoder().decode(HyprshellConfiguration.self, from: Data(contentsOf: url))
+            configuration = try JSONDecoder().decode(RyftConfiguration.self, from: Data(contentsOf: url))
             statusMessage = "Profile imported"
         } catch { statusMessage = "Invalid profile: \(error.localizedDescription)" }
     }
@@ -301,7 +315,7 @@ final class AppModel: ObservableObject {
                         DispatchQueue.main.async { self.configuration.bar.palette = palette }
                     }
                 }
-                NotificationCenter.default.post(name: .hyprshellWallpaperChanged, object: url)
+                NotificationCenter.default.post(name: .ryftWallpaperChanged, object: url)
             } else { self.statusMessage = "Wallpaper failed on \(failures) desktop(s)" }
             self.wallpaperTransition.reveal()
         }
@@ -322,7 +336,7 @@ final class AppModel: ObservableObject {
             guard let temporary, error == nil else {
                 DispatchQueue.main.async { self.installingWallpaperArchive = false; self.wallpaperArchiveStatus = "Archive download failed. Check your connection." }; return
             }
-            let staging = FileManager.default.temporaryDirectory.appendingPathComponent("HyprshellWallpapers-\(UUID().uuidString)", isDirectory: true)
+            let staging = FileManager.default.temporaryDirectory.appendingPathComponent("RyftWallpapers-\(UUID().uuidString)", isDirectory: true)
             do {
                 try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
                 let process = Process(); process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto"); process.arguments = ["-x", "-k", temporary.path, staging.path]
@@ -396,11 +410,11 @@ final class AppModel: ObservableObject {
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case bar = "Bar", themes = "Themes", modules = "Widgets", tiling = "Tiling", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
+    case home = "Overview", bar = "Bar", themes = "Themes", modules = "Widgets", tiling = "Tiling", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
     var id: String { rawValue }
     var symbol: String {
         switch self {
-        case .bar: "menubar.rectangle"; case .themes: "paintpalette"; case .modules: "square.grid.2x2"
+        case .home: "house.fill"; case .bar: "menubar.rectangle"; case .themes: "paintpalette"; case .modules: "square.grid.2x2"
         case .tiling: "rectangle.split.2x1"; case .shortcuts: "command"; case .wallpapers: "photo.on.rectangle.angled"; case .general: "gearshape"
         }
     }

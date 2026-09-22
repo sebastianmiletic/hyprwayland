@@ -1,5 +1,5 @@
 ---
-name: Hyprshell
+name: Ryft
 description: A native macOS control surface for a Linux-shaped desktop.
 colors:
   charred-plum: "#141313"
@@ -54,13 +54,13 @@ components:
     padding: "18px"
 ---
 
-# Design System: Hyprshell
+# Design System: Ryft
 
 ## 1. Overview
 
 **Creative North Star: "The Native Rice Workbench"**
 
-Hyprshell should feel like a carefully tuned desktop environment that happens to obey macOS conventions. The persistent bar is compact and expressive; the editor is calmer and more familiar so users can make consequential desktop changes with confidence.
+Ryft should feel like a carefully tuned desktop environment that happens to obey macOS conventions. The persistent bar is compact and expressive; the editor is calmer and more familiar so users can make consequential desktop changes with confidence.
 
 The system is technical, tactile, and composed. Density is welcome where it supports scanning, but decoration never competes with status or control. It explicitly rejects SaaS dashboard framing, decorative glassmorphism, terminal cosplay, nested cards, and controls that only simulate an outcome.
 
@@ -111,7 +111,7 @@ The default Sebastian II palette uses warm charcoal and mineral neutrals rather 
 
 ## 4. Elevation
 
-Hyprshell is flat by default. Depth comes from tonal layering, thin neutral outlines, native macOS material blur, and window hierarchy. Real desktop blur is user-controlled for the bar and side panels; tint opacity determines how much live wallpaper remains visible. The bar uses no shadow because it already occupies the highest desktop layer; settings groups use a subtle full perimeter stroke rather than dramatic lift.
+Ryft is flat by default. Depth comes from tonal layering, thin neutral outlines, native macOS material blur, and window hierarchy. Real desktop blur is user-controlled for the bar and side panels; tint opacity determines how much live wallpaper remains visible. The bar uses no shadow because it already occupies the highest desktop layer; settings groups use a subtle full perimeter stroke rather than dramatic lift.
 
 **The Tonal Depth Rule.** Use surface contrast first. A shadow is reserved for an actual floating system window, never for routine settings groups.
 
@@ -167,7 +167,7 @@ Hyprshell is flat by default. Depth comes from tonal layering, thin neutral outl
 - **Do** use Charred Plum, Raised Plum, and Pearl Text as the default tonal hierarchy.
 - **Do** preserve native keyboard navigation, VoiceOver labels, and reduced-motion behavior.
 - **Do** preview the MacBook notch and all four widget zones while editing.
-- **Do** keep a settings gear in the desktop bar and a persistent Hyprshell menu-bar item.
+- **Do** keep a settings gear in the desktop bar and a persistent Ryft menu-bar item.
 - **Do** explain macOS permissions and system shortcut prerequisites next to the affected control.
 
 ### Don't:

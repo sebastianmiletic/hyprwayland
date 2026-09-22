@@ -3,7 +3,7 @@ import Combine
 import Darwin
 
 /// Tracks the actual current Mission Control desktop. macOS exposes the change
-/// notification publicly but not the desktop index, so Hyprshell reads the same
+/// notification publicly but not the desktop index, so Ryft reads the same
 /// ordered Space metadata used by Dock through dynamically resolved SkyLight
 /// symbols. It falls back to tracked keyboard navigation if Apple changes it.
 final class WorkspaceService: ObservableObject {
@@ -72,7 +72,7 @@ final class WorkspaceService: ObservableObject {
     }
 
     /// Visits each ordinary Mission Control desktop directly through the same
-    /// SkyLight managed-space data Hyprshell already reads. The original spaces
+    /// SkyLight managed-space data Ryft already reads. The original spaces
     /// are restored after updating, avoiding reliance on Control-number keys.
     func visitEveryDesktop(_ visit: @escaping (NSScreen) -> Void, completion: @escaping () -> Void) {
         guard let mainConnection, let copySpaces, let setCurrentSpace,
