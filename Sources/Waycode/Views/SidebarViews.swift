@@ -92,15 +92,16 @@ struct RightSidebarView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var system: SystemMonitor
     @ObservedObject private var controls: SystemControlService
+    @ObservedObject private var notifications: NotificationDaemon
     let close: () -> Void
     private var palette: ThemePalette { model.configuration.bar.palette }
-    init(model: AppModel, close: @escaping () -> Void) { self.model = model; self.system = model.system; self.controls = model.controls; self.close = close }
+    init(model: AppModel, close: @escaping () -> Void) { self.model = model; self.system = model.system; self.controls = model.controls; self.notifications = model.notifications; self.close = close }
 
     var body: some View {
         SidebarShell(appearance: model.configuration.bar, close: close) {
             if model.rightSidebarDetail.isEmpty {
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 11) { systemRow; quickToggles; resources; calendar; todos }.padding(.trailing, 1)
+                    VStack(spacing: 11) { systemRow; quickToggles; resources; notificationFeed; calendar; todos }.padding(.trailing, 1)
                 }.transition(.move(edge: .leading).combined(with: .opacity))
             } else {
                 VStack(spacing: 10) {
@@ -129,15 +130,28 @@ struct RightSidebarView: View {
             quick("Wi-Fi", icon: "wifi", subtitle: controls.connectedSSID) { model.rightSidebarDetail = "Wi-Fi"; controls.requestWiFiAccessAndScan() }
             quick("Bluetooth", icon: "bluetooth", subtitle: "Devices") { model.openSystemSettings("Bluetooth") }
             quick("Dark mode", icon: "moon.fill", subtitle: "Appearance") { model.toggleAppearance() }
-            quick("Battery", icon: controls.lowPowerMode ? "battery.25percent" : "battery.75percent", subtitle: controls.lowPowerMode ? "Low Power Mode" : controls.batteryPercent) { model.rightSidebarDetail = "Battery"; controls.refreshPowerState() }
+            quick("Battery", icon: batterySymbol, subtitle: controls.lowPowerMode ? "Low Power Mode · \(controls.batteryPercent)" : controls.batteryPercent) { model.rightSidebarDetail = "Battery"; controls.refreshPowerState() }
         }
     }
     private var resources: some View {
         HStack(spacing: 8) {
             resource("CPU", value: system.cpu, icon: "cpu")
             resource("Memory", value: system.memory, icon: "memorychip")
-            Button { model.rightSidebarDetail = "Battery"; controls.refreshPowerState() } label: { resource("Battery", value: system.battery, icon: "battery.75percent") }.buttonStyle(.plain)
+            Button { model.rightSidebarDetail = "Battery"; controls.refreshPowerState() } label: { resource("Battery", value: controls.batteryPercent, icon: batterySymbol, color: batteryColor) }.buttonStyle(.plain)
         }.padding(10).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 17))
+    }
+    private var notificationFeed: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack { Text("Notifications").font(.headline); Spacer(); Text(notifications.authorizationStatus).font(.caption).foregroundStyle(Color(hex: palette.muted)) }
+            if notifications.recent.isEmpty {
+                Text("Battery and Waycode alerts appear here. Messages and alerts from other apps remain private in macOS Notification Center.").font(.caption).foregroundStyle(Color(hex: palette.muted))
+            } else {
+                ForEach(notifications.recent.prefix(3)) { item in
+                    HStack(alignment: .top, spacing: 8) { Image(systemName: "bell.fill").foregroundStyle(Color(hex: palette.accent)); VStack(alignment: .leading, spacing: 2) { Text(item.title).fontWeight(.semibold); Text(item.message).font(.caption).foregroundStyle(Color(hex: palette.muted)) }; Spacer() }
+                }
+            }
+            Button { model.openNotificationCenter() } label: { Label("Open macOS Notification Center", systemImage: "rectangle.topthird.inset.filled") }.buttonStyle(.plain).font(.caption.weight(.semibold)).foregroundStyle(Color(hex: palette.accent))
+        }.padding(14).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 17))
     }
     private var calendar: some View {
         DatePicker("", selection: .constant(Date()), displayedComponents: [.date]).datePickerStyle(.graphical).labelsHidden()
@@ -210,10 +224,20 @@ struct RightSidebarView: View {
             Spacer()
         }.padding(.top, 30)
     }
+    private var batterySymbol: String {
+        switch controls.batteryLevel { case 90...: "battery.100percent"; case 65..<90: "battery.75percent"; case 40..<65: "battery.50percent"; case 15..<40: "battery.25percent"; default: "battery.0percent" }
+    }
+    private var batteryColor: Color {
+        if controls.batteryCharging { return Color(hex: palette.success) }
+        if controls.batteryLevel >= 0 && controls.batteryLevel <= 10 { return .red }
+        if controls.batteryLevel >= 0 && controls.batteryLevel <= 20 { return .orange }
+        if controls.lowPowerMode { return .yellow }
+        return Color(hex: palette.foreground)
+    }
     private func signalIcon(_ value: Int) -> String { value > -55 ? "wifi" : value > -72 ? "wifi" : "wifi.exclamationmark" }
     private func iconButton(_ icon: String, action: @escaping () -> Void) -> some View { Button(action: action) { Image(systemName: icon).frame(width: 28, height: 28) }.buttonStyle(.plain) }
     private func quick(_ title: String, icon: String, subtitle: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { HStack { Image(systemName: icon).font(.title3).foregroundStyle(title == "Battery" && controls.lowPowerMode ? Color.yellow : Color(hex: palette.foreground)); VStack(alignment: .leading) { Text(title).fontWeight(.semibold); Text(subtitle).font(.caption).foregroundStyle(Color(hex: palette.muted)).lineLimit(1) }; Spacer() }.padding(12).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 15)) }.buttonStyle(.plain)
+        Button(action: action) { HStack { Image(systemName: icon).font(.title3).foregroundStyle(title == "Battery" ? batteryColor : Color(hex: palette.foreground)); VStack(alignment: .leading) { Text(title).fontWeight(.semibold); Text(subtitle).font(.caption).foregroundStyle(Color(hex: palette.muted)).lineLimit(1) }; Spacer() }.padding(12).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 15)) }.buttonStyle(.plain)
     }
-    private func resource(_ title: String, value: String, icon: String) -> some View { VStack(spacing: 4) { Image(systemName: icon); Text(value).fontWeight(.semibold); Text(title).font(.caption).foregroundStyle(Color(hex: palette.muted)) }.frame(maxWidth: .infinity) }
+    private func resource(_ title: String, value: String, icon: String, color: Color? = nil) -> some View { VStack(spacing: 4) { Image(systemName: icon).foregroundStyle(color ?? Color(hex: palette.foreground)); Text(value).fontWeight(.semibold); Text(title).font(.caption).foregroundStyle(Color(hex: palette.muted)) }.frame(maxWidth: .infinity) }
 }

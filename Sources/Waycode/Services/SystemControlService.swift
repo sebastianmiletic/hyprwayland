@@ -27,6 +27,8 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     @Published var outputVolume: Double = 50
     @Published var lowPowerMode = false
     @Published var batteryPercent = "--"
+    @Published var batteryLevel = -1
+    @Published var batteryCharging = false
     @Published var operationMessage = ""
 
     private let locationManager = CLLocationManager()
@@ -153,8 +155,10 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     func refreshPowerState() {
         runProcess("/usr/bin/pmset", ["-g", "batt"]) { text in
             let percent = text.range(of: #"\d+%"#, options: .regularExpression).map { String(text[$0]) } ?? "--"
+            let level = Int(percent.filter(\.isNumber)) ?? -1
             let lowPower = text.localizedCaseInsensitiveContains("low power mode: 1")
-            DispatchQueue.main.async { self.batteryPercent = percent; self.lowPowerMode = lowPower }
+            let charging = text.localizedCaseInsensitiveContains("charging") || text.localizedCaseInsensitiveContains("charged") || text.localizedCaseInsensitiveContains("AC Power")
+            DispatchQueue.main.async { self.batteryPercent = percent; self.batteryLevel = level; self.batteryCharging = charging; self.lowPowerMode = lowPower }
         }
         runProcess("/usr/bin/pmset", ["-g", "custom"]) { text in
             let matches = text.components(separatedBy: .newlines).filter { $0.contains("lowpowermode") }

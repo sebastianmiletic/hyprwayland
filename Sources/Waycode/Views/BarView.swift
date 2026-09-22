@@ -207,16 +207,21 @@ private struct WidgetView: View {
         case .activeApp: widgetLabel(system.activeApp)
         case .wifi: widgetLabel(system.wifi)
         case .battery:
-            HStack(spacing: 6) {
-                if widget.showIcon { WidgetIcon(value: widget.icon).foregroundStyle(controls.lowPowerMode ? Color.yellow : Color(hex: widget.foreground ?? palette.foreground)) }
-                if widget.showLabel { Text(system.battery).lineLimit(1) }
+            HStack(spacing: 5) {
+                if widget.showIcon {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: batterySymbol).foregroundStyle(batteryColor)
+                        if controls.batteryCharging { Image(systemName: "bolt.fill").font(.system(size: 6, weight: .bold)).foregroundStyle(Color(hex: palette.background)).offset(x: 2, y: -1) }
+                    }
+                }
+                if widget.showLabel { Text(controls.batteryPercent).lineLimit(1) }
             }
         case .volume: widgetLabel("\(Int(controls.outputVolume))%")
         case .uptime: widgetLabel("CPU \(system.cpu) · RAM \(system.memory)")
         case .rightSidebar:
             if model.configuration.bar.sourceExact {
                 HStack(spacing: 12) {
-                    detailButton("battery.75percent", detail: "Battery", color: controls.lowPowerMode ? .yellow : Color(hex: palette.foreground))
+                    detailButton(batterySymbol, detail: "Battery", color: batteryColor)
                     detailButton("keyboard", detail: "")
                     detailButton("wifi", detail: "Wi-Fi")
                     detailButton(controls.outputVolume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill", detail: "Sound")
@@ -228,6 +233,16 @@ private struct WidgetView: View {
         }
     }
 
+    private var batterySymbol: String {
+        switch controls.batteryLevel { case 90...: "battery.100percent"; case 65..<90: "battery.75percent"; case 40..<65: "battery.50percent"; case 15..<40: "battery.25percent"; default: "battery.0percent" }
+    }
+    private var batteryColor: Color {
+        if controls.batteryCharging { return Color(hex: palette.success) }
+        if controls.batteryLevel >= 0 && controls.batteryLevel <= 10 { return .red }
+        if controls.batteryLevel >= 0 && controls.batteryLevel <= 20 { return .orange }
+        if controls.lowPowerMode { return .yellow }
+        return Color(hex: widget.foreground ?? palette.foreground)
+    }
     private var popoverPresented: Binding<Bool> {
         Binding(get: { model.statusPopoverWidgetID == widget.id && model.statusPopoverInteractionID == interactionID }, set: { if !$0 { model.statusPopoverWidgetID = nil; model.statusPopoverInteractionID = nil; model.statusPopoverDetail = "" } })
     }
@@ -281,7 +296,7 @@ private struct StatusQuickPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 9) {
-                Image(systemName: icon).foregroundStyle(Color(hex: palette.accent)).frame(width: 26, height: 26).background(Color(hex: palette.surface)).clipShape(Circle())
+                Image(systemName: icon).foregroundStyle(iconColor).frame(width: 26, height: 26).background(Color(hex: palette.surface)).clipShape(Circle())
                 Text(detail).font(.system(size: 15, weight: .semibold, design: .rounded)); Spacer()
             }
             Rectangle().fill(Color(hex: palette.muted).opacity(0.25)).frame(height: 1)
@@ -292,7 +307,18 @@ private struct StatusQuickPopover: View {
         }
         .padding(16).background(Color(hex: palette.background)).foregroundStyle(Color(hex: palette.foreground))
     }
-    private var icon: String { detail == "Wi-Fi" ? "wifi" : detail == "Sound" ? "speaker.wave.2.fill" : "battery.75percent" }
+    private var iconColor: Color {
+        guard detail == "Battery" else { return Color(hex: palette.accent) }
+        if controls.batteryCharging { return Color(hex: palette.success) }
+        if controls.batteryLevel >= 0 && controls.batteryLevel <= 10 { return .red }
+        if controls.batteryLevel >= 0 && controls.batteryLevel <= 20 { return .orange }
+        if controls.lowPowerMode { return .yellow }
+        return Color(hex: palette.accent)
+    }
+    private var icon: String {
+        if detail == "Wi-Fi" { return "wifi" }; if detail == "Sound" { return "speaker.wave.2.fill" }
+        switch controls.batteryLevel { case 90...: return "battery.100percent"; case 65..<90: return "battery.75percent"; case 40..<65: return "battery.50percent"; case 15..<40: return "battery.25percent"; default: return "battery.0percent" }
+    }
     private var wifiContent: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {

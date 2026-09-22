@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         let model = AppModel.shared
+        _ = model.notifications
         barController = BarPanelController(model: model)
         wallpaperController = WallpaperWindowController(model: model)
         sidePanelController = SidePanelController(model: model)

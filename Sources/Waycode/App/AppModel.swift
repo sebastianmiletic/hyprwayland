@@ -33,6 +33,7 @@ final class AppModel: ObservableObject {
     @Published var installingWallpaperArchive = false
     let system = SystemMonitor()
     let controls = SystemControlService()
+    lazy var notifications = NotificationDaemon(controls: controls)
     let workspaces = WorkspaceService()
     let tiling = TilingService()
     let gemini = GeminiService()
@@ -311,6 +312,13 @@ final class AppModel: ObservableObject {
         system.refresh()
     }
     func toggleAppearance() { runUtility("osascript", ["-e", "tell application \"System Events\" to tell appearance preferences to set dark mode to not dark mode"]) }
+    func openNotificationCenter() {
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let down = CGEvent(keyboardEventSource: source, virtualKey: 45, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: 45, keyDown: false) else { return }
+        down.flags = .maskSecondaryFn; up.flags = .maskSecondaryFn
+        down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
+    }
     func openSystemSettings(_ pane: String = "") {
         let target = pane.isEmpty ? "x-apple.systempreferences:" : "x-apple.systempreferences:com.apple.\(pane)"
         if let url = URL(string: target) { NSWorkspace.shared.open(url) }
