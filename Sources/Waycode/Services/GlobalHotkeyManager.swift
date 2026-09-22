@@ -5,7 +5,8 @@ final class GlobalHotkeyManager {
     private var refs: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
     private var registeredShortcuts: [UInt32: ShortcutConfiguration] = [:]
-    private var lastInvocation: (UUID, Date)?
+    private var systemShortcuts: [UInt32: ShortcutConfiguration] = [:]
+    private var lastInvocation: (String, Date)?
     private var lastWorkspaceInvocation: (Int, Date)?
     private var polledShortcuts: [ShortcutConfiguration] = []
     private var keysDown = Set<Int>()
@@ -16,7 +17,7 @@ final class GlobalHotkeyManager {
 
     init() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let status = InstallEventHandler(GetApplicationEventTarget(), { _, event, userData in
+        let status = InstallEventHandler(GetEventDispatcherTarget(), { _, event, userData in
             guard let event, let userData else { return noErr }
             var id = EventHotKeyID()
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
@@ -25,7 +26,7 @@ final class GlobalHotkeyManager {
                 DispatchQueue.main.async { manager.invokeWorkspace(Int(id.id - 1000)) }
                 return noErr
             }
-            guard let shortcut = manager.registeredShortcuts[id.id] else { return noErr }
+            guard let shortcut = manager.systemShortcuts[id.id] ?? manager.registeredShortcuts[id.id] else { return noErr }
             DispatchQueue.main.async { manager.invoke(shortcut) }
             return noErr
         }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handler)
@@ -47,13 +48,28 @@ final class GlobalHotkeyManager {
     func register(_ shortcuts: [ShortcutConfiguration]) {
         clear(); polledShortcuts = shortcuts
         var combinations = Set<String>()
+        // Core entry points are registered directly with the macOS event
+        // dispatcher. They do not depend on the settings window, app focus, or
+        // the editable keybind list.
+        let fixed: [(UInt32, ShortcutAction, String, Int)] = [
+            (2001, .wallpaper, "w", 13), (2002, .leftSidebar, "a", 0), (2003, .rightSidebar, "n", 45)
+        ]
+        for (idValue, action, key, code) in fixed {
+            let shortcut = ShortcutConfiguration(action: action, key: key)
+            var ref: EventHotKeyRef?
+            let id = EventHotKeyID(signature: Self.signature, id: idValue)
+            let status = RegisterEventHotKey(UInt32(code), UInt32(optionKey), id, GetEventDispatcherTarget(), 0, &ref)
+            if status == noErr, let ref { refs.append(ref); systemShortcuts[idValue] = shortcut; NSLog("Waycode registered system-wide shortcut %@", shortcut.display) }
+            else { NSLog("Waycode could not register system-wide shortcut %@ (OSStatus %d)", shortcut.display, status) }
+            combinations.insert("\(code)-\(UInt32(optionKey))")
+        }
         // Workspace navigation is intentionally fixed and global, matching the
         // desktop labels in the bar. Carbon hotkeys need no Accessibility or
         // Input Monitoring permission and continue working behind other apps.
         for (number, code) in [18, 19, 20, 21, 23, 22, 26, 28, 25].enumerated() {
             var ref: EventHotKeyRef?
             let id = EventHotKeyID(signature: Self.signature, id: UInt32(1001 + number))
-            if RegisterEventHotKey(UInt32(code), UInt32(optionKey), id, GetApplicationEventTarget(), 0, &ref) == noErr, let ref { refs.append(ref) }
+            if RegisterEventHotKey(UInt32(code), UInt32(optionKey), id, GetEventDispatcherTarget(), 0, &ref) == noErr, let ref { refs.append(ref) }
             combinations.insert("\(code)-\(UInt32(optionKey))")
         }
         for (index, shortcut) in shortcuts.enumerated() {
@@ -69,7 +85,7 @@ final class GlobalHotkeyManager {
             var ref: EventHotKeyRef?
             let hotkeyID = UInt32(index + 1)
             let id = EventHotKeyID(signature: Self.signature, id: hotkeyID)
-            let status = RegisterEventHotKey(UInt32(code), modifiers, id, GetApplicationEventTarget(), 0, &ref)
+            let status = RegisterEventHotKey(UInt32(code), modifiers, id, GetEventDispatcherTarget(), 0, &ref)
             if status == noErr, let ref { refs.append(ref); registeredShortcuts[hotkeyID] = shortcut; NSLog("Waycode registered global shortcut %@ for %@", shortcut.display, shortcut.action.rawValue) }
             else { NSLog("Waycode could not register global shortcut %@ (OSStatus %d)", shortcut.display, status) }
         }
@@ -107,11 +123,12 @@ final class GlobalHotkeyManager {
     }
 
     private func invoke(_ shortcut: ShortcutConfiguration) {
-        if let lastInvocation, lastInvocation.0 == shortcut.id, Date().timeIntervalSince(lastInvocation.1) < 0.18 { return }
-        lastInvocation = (shortcut.id, Date()); NSLog("Waycode received global shortcut %@", shortcut.display); onShortcut?(shortcut)
+        let invocationKey = shortcut.action.rawValue + "|" + shortcut.display
+        if let lastInvocation, lastInvocation.0 == invocationKey, Date().timeIntervalSince(lastInvocation.1) < 0.18 { return }
+        lastInvocation = (invocationKey, Date()); NSLog("Waycode received global shortcut %@", shortcut.display); onShortcut?(shortcut)
     }
 
-    private func clear() { refs.forEach { UnregisterEventHotKey($0) }; refs.removeAll(); registeredShortcuts.removeAll() }
+    private func clear() { refs.forEach { UnregisterEventHotKey($0) }; refs.removeAll(); registeredShortcuts.removeAll(); systemShortcuts.removeAll() }
     private static let signature: OSType = 0x57415943
     static let keyCodes: [String: Int] = [
         "a":0,"s":1,"d":2,"f":3,"h":4,"g":5,"z":6,"x":7,"c":8,"v":9,"b":11,"q":12,"w":13,"e":14,"r":15,"y":16,"t":17,

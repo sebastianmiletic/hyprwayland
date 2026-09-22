@@ -211,7 +211,10 @@ struct RightSidebarView: View {
     }
     private var batteryDetail: some View {
         VStack(spacing: 14) {
-            Image(systemName: "battery.75percent").font(.system(size: 46)).foregroundStyle(Color(hex: palette.accent))
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: batterySymbol).font(.system(size: 46)).foregroundStyle(batteryColor)
+                if controls.batteryCharging { Image(systemName: "bolt.fill").font(.caption.bold()).foregroundStyle(.white).offset(x: 4, y: 2) }
+            }
             Text(controls.batteryPercent).font(.system(size: 34, weight: .semibold, design: .rounded))
             Toggle("Low Power Mode", isOn: Binding(get: { controls.lowPowerMode }, set: { controls.setLowPowerMode($0) }))
                 .padding(14).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 14))
@@ -223,17 +226,17 @@ struct RightSidebarView: View {
     private var batterySymbol: String {
         switch controls.batteryLevel { case 90...: "battery.100percent"; case 65..<90: "battery.75percent"; case 40..<65: "battery.50percent"; case 15..<40: "battery.25percent"; default: "battery.0percent" }
     }
-    private var batteryColor: Color {
-        if controls.batteryCharging { return Color(hex: palette.success) }
-        if controls.batteryLevel >= 0 && controls.batteryLevel <= 10 { return .red }
-        if controls.batteryLevel >= 0 && controls.batteryLevel <= 20 { return .orange }
-        if controls.lowPowerMode { return .yellow }
-        return Color(hex: palette.foreground)
-    }
+    private var batteryColor: Color { controls.lowPowerMode ? .yellow : .white }
     private func signalIcon(_ value: Int) -> String { value > -55 ? "wifi" : value > -72 ? "wifi" : "wifi.exclamationmark" }
     private func iconButton(_ icon: String, action: @escaping () -> Void) -> some View { Button(action: action) { Image(systemName: icon).frame(width: 28, height: 28) }.buttonStyle(.plain) }
     private func quick(_ title: String, icon: String, subtitle: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { HStack { Image(systemName: icon).font(.title3).foregroundStyle(title == "Battery" ? batteryColor : Color(hex: palette.foreground)); VStack(alignment: .leading) { Text(title).fontWeight(.semibold); Text(subtitle).font(.caption).foregroundStyle(Color(hex: palette.muted)).lineLimit(1) }; Spacer() }.padding(12).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 15)) }.buttonStyle(.plain)
+        Button(action: action) { HStack { statusIcon(icon, battery: title == "Battery"); VStack(alignment: .leading) { Text(title).fontWeight(.semibold); Text(subtitle).font(.caption).foregroundStyle(Color(hex: palette.muted)).lineLimit(1) }; Spacer() }.padding(12).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 15)) }.buttonStyle(.plain)
     }
-    private func resource(_ title: String, value: String, icon: String, color: Color? = nil) -> some View { VStack(spacing: 4) { Image(systemName: icon).foregroundStyle(color ?? Color(hex: palette.foreground)); Text(value).fontWeight(.semibold); Text(title).font(.caption).foregroundStyle(Color(hex: palette.muted)) }.frame(maxWidth: .infinity) }
+    private func resource(_ title: String, value: String, icon: String, color: Color? = nil) -> some View { VStack(spacing: 4) { statusIcon(icon, battery: title == "Battery", color: color); Text(value).fontWeight(.semibold); Text(title).font(.caption).foregroundStyle(Color(hex: palette.muted)) }.frame(maxWidth: .infinity) }
+    private func statusIcon(_ icon: String, battery: Bool, color: Color? = nil) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: icon).font(.title3).foregroundStyle(battery ? batteryColor : (color ?? Color(hex: palette.foreground)))
+            if battery && controls.batteryCharging { Image(systemName: "bolt.fill").font(.system(size: 6, weight: .bold)).foregroundStyle(.white).offset(x: 2, y: -1) }
+        }
+    }
 }

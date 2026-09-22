@@ -239,13 +239,7 @@ private struct WidgetView: View {
     private var batterySymbol: String {
         switch controls.batteryLevel { case 90...: "battery.100percent"; case 65..<90: "battery.75percent"; case 40..<65: "battery.50percent"; case 15..<40: "battery.25percent"; default: "battery.0percent" }
     }
-    private var batteryColor: Color {
-        if controls.batteryCharging { return Color(hex: palette.success) }
-        if controls.batteryLevel >= 0 && controls.batteryLevel <= 10 { return .red }
-        if controls.batteryLevel >= 0 && controls.batteryLevel <= 20 { return .orange }
-        if controls.lowPowerMode { return .yellow }
-        return Color(hex: widget.foreground ?? palette.foreground)
-    }
+    private var batteryColor: Color { controls.lowPowerMode ? .yellow : .white }
     private var popoverPresented: Binding<Bool> {
         Binding(get: { model.statusPopoverWidgetID == widget.id && model.statusPopoverInteractionID == interactionID }, set: { if !$0 { model.statusPopoverWidgetID = nil; model.statusPopoverInteractionID = nil; model.statusPopoverDetail = "" } })
     }
@@ -266,7 +260,12 @@ private struct WidgetView: View {
             if detail == "Battery" { controls.setLowPowerMode(!controls.lowPowerMode) }
             else if detail.isEmpty { NotificationCenter.default.post(name: .waycodeToggleRightSidebar, object: nil) }
             else { model.statusPopoverDetail = detail; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; if detail == "Wi-Fi" { controls.requestWiFiAccessAndScan() }; if detail == "Sound" { controls.refreshAudioDevices() } }
-        } label: { Image(systemName: icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24) }
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24)
+                if detail == "Battery" && controls.batteryCharging { Image(systemName: "bolt.fill").font(.system(size: 6, weight: .bold)).foregroundStyle(.white).offset(x: 2, y: 2) }
+            }
+        }
             .buttonStyle(.plain).help(detail.isEmpty ? "Control center" : detail)
     }
     private func widgetLabel(_ value: String) -> some View {
@@ -313,11 +312,7 @@ private struct StatusQuickPopover: View {
     }
     private var iconColor: Color {
         guard detail == "Battery" else { return Color(hex: palette.accent) }
-        if controls.batteryCharging { return Color(hex: palette.success) }
-        if controls.batteryLevel >= 0 && controls.batteryLevel <= 10 { return .red }
-        if controls.batteryLevel >= 0 && controls.batteryLevel <= 20 { return .orange }
-        if controls.lowPowerMode { return .yellow }
-        return Color(hex: palette.accent)
+        return controls.lowPowerMode ? .yellow : .white
     }
     private var icon: String {
         if detail == "Wi-Fi" { return "wifi" }; if detail == "Sound" { return "speaker.wave.2.fill" }
