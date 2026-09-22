@@ -212,7 +212,7 @@ private struct WidgetView: View {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 widgetLabel(context.date.formatted(date: .abbreviated, time: .shortened)).monospacedDigit()
             }
-        case .leftSidebar: widgetLabel("Tools")
+        case .leftSidebar: widgetLabel("Tools").foregroundStyle(Color(hex: palette.accent))
         case .wallpaper: widgetLabel("Wallpapers")
         case .activeApp: widgetLabel(system.activeApp)
         case .wifi: widgetLabel(system.wifi)
@@ -303,11 +303,7 @@ private struct WallpaperBarPopover: View {
     private var choices: [URL] { Array(model.wallpapers.prefix(120)) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) { Text("Wallpapers").font(.headline); Text("← → to browse · Return to apply everywhere").font(.caption).foregroundStyle(Color(hex: palette.muted)) }
-                Spacer(); Text("\(choices.isEmpty ? 0 : selected + 1)/\(choices.count)").font(.caption.monospacedDigit()).foregroundStyle(Color(hex: palette.muted))
-            }
+        VStack(alignment: .leading, spacing: 10) {
             if choices.isEmpty {
                 VStack(spacing: 8) { Image(systemName: "photo.badge.plus").font(.title); Text("Add wallpaper folders in Waycode Settings").font(.caption) }.frame(maxWidth: .infinity, minHeight: 120).foregroundStyle(Color(hex: palette.muted))
             } else {
@@ -320,19 +316,24 @@ private struct WallpaperBarPopover: View {
                         }.padding(3)
                     }.onChange(of: model.wallpaperSelectionIndex) { _ in withAnimation(.easeOut(duration: 0.18)) { proxy.scrollTo(selected, anchor: .center) } }
                 }.frame(height: 118)
-                Button { apply() } label: { Label("Apply to every desktop", systemImage: "checkmark").frame(maxWidth: .infinity).frame(height: 34).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(RoundedRectangle(cornerRadius: 10)) }
-                    .buttonStyle(SourcePressButtonStyle()).keyboardShortcut(.return, modifiers: [])
+                HStack(spacing: 8) {
+                    applyButton("Apply to desktop", icon: "desktopcomputer", primary: true) { apply(allDesktops: false) }
+                    applyButton("Apply to all desktops", icon: "rectangle.3.group", primary: false) { apply(allDesktops: true) }
+                }
             }
+            WallpaperKeyboardCapture(left: { move(-1) }, right: { move(1) }, enter: { apply(allDesktops: false) }).frame(width: 0, height: 0)
         }
-        .padding(14).background(Color(hex: palette.background)).foregroundStyle(Color(hex: palette.foreground))
-        .focusable().onMoveCommand { direction in
-            guard !choices.isEmpty else { return }
-            if direction == .left { model.wallpaperSelectionIndex = max(0, selected - 1) }
-            if direction == .right { model.wallpaperSelectionIndex = min(choices.count - 1, selected + 1) }
-        }
+        .padding(12)
+        .background(LinearGradient(colors: [Color(hex: palette.background), Color(hex: palette.surface).opacity(0.9)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .foregroundStyle(Color(hex: palette.foreground)).clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: palette.muted).opacity(0.3)))
         .onAppear { model.wallpaperSelectionIndex = max(0, choices.firstIndex { $0.path == model.configuration.currentWallpaper } ?? 0) }
     }
-    private func apply() { guard choices.indices.contains(selected) else { return }; model.setWallpaper(choices[selected]) }
+    private func move(_ amount: Int) { guard !choices.isEmpty else { return }; model.wallpaperSelectionIndex = min(max(selected + amount, 0), choices.count - 1) }
+    private func apply(allDesktops: Bool) { guard choices.indices.contains(selected) else { return }; model.setWallpaper(choices[selected], allDesktops: allDesktops) }
+    private func applyButton(_ title: String, icon: String, primary: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Label(title, systemImage: icon).font(.caption.weight(.semibold)).frame(maxWidth: .infinity).frame(height: 34).background(primary ? Color(hex: palette.accent) : Color(hex: palette.surface)).foregroundStyle(primary ? Color(hex: palette.background) : Color(hex: palette.foreground)).clipShape(RoundedRectangle(cornerRadius: 10)) }.buttonStyle(SourcePressButtonStyle())
+    }
 }
 
 private struct WallpaperBarCard: View {
@@ -344,13 +345,39 @@ private struct WallpaperBarCard: View {
     var body: some View {
         Button(action: action) {
             ZStack(alignment: .bottomLeading) {
-                if let image = thumbnail.image { Image(nsImage: image).resizable().scaledToFill() } else { Color.black.opacity(0.25); ProgressView() }
+                if let image = thumbnail.image { Image(nsImage: image).resizable().scaledToFill() } else { Color.black.opacity(0.18); Image(systemName: "photo").foregroundStyle(.white.opacity(0.45)) }
                 LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .center, endPoint: .bottom)
                 Text(url.deletingPathExtension().lastPathComponent).font(.caption2.weight(.semibold)).foregroundStyle(.white).lineLimit(1).padding(8)
             }.frame(width: selected ? 166 : 150, height: selected ? 108 : 96).clipped().clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 13).stroke(.white.opacity(selected ? 0.95 : 0.15), lineWidth: selected ? 3 : 1))
                 .animation(.easeOut(duration: 0.16), value: selected)
         }.buttonStyle(SourcePressButtonStyle())
+    }
+}
+
+private struct WallpaperKeyboardCapture: NSViewRepresentable {
+    let left: () -> Void
+    let right: () -> Void
+    let enter: () -> Void
+    func makeNSView(context: Context) -> WallpaperKeyView {
+        let view = WallpaperKeyView(); view.left = left; view.right = right; view.enter = enter
+        DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
+        return view
+    }
+    func updateNSView(_ view: WallpaperKeyView, context: Context) {
+        view.left = left; view.right = right; view.enter = enter
+        DispatchQueue.main.async { if view.window?.firstResponder !== view { view.window?.makeFirstResponder(view) } }
+    }
+}
+
+private final class WallpaperKeyView: NSView {
+    var left: () -> Void = {}
+    var right: () -> Void = {}
+    var enter: () -> Void = {}
+    override var acceptsFirstResponder: Bool { true }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); DispatchQueue.main.async { self.window?.makeFirstResponder(self) } }
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode { case 123: left(); case 124: right(); case 36, 76: enter(); default: super.keyDown(with: event) }
     }
 }
 
@@ -495,7 +522,7 @@ struct WidgetIcon: View {
         if value.hasPrefix("text:") {
             Text(String(value.dropFirst(5))).lineLimit(1)
         } else if value.hasPrefix("bundle:"), let url = Bundle.module.url(forResource: String(value.dropFirst(7)), withExtension: nil), let image = NSImage(contentsOf: url) {
-            Image(nsImage: image).resizable().scaledToFit().frame(width: 19.5, height: 19.5)
+            Image(nsImage: image).renderingMode(.template).resizable().scaledToFit().frame(width: 19.5, height: 19.5)
         } else if value.hasPrefix("/"), let image = NSImage(contentsOfFile: value) {
             Image(nsImage: image).resizable().scaledToFit().frame(width: 16, height: 16)
         } else {

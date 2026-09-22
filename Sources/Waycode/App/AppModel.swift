@@ -265,23 +265,25 @@ final class AppModel: ObservableObject {
         else { configuration.favoriteWallpapers.append(url.path) }
     }
 
-    func setWallpaper(_ url: URL) {
-        guard url.path != configuration.currentWallpaper else { return }
+    func setWallpaper(_ url: URL, allDesktops: Bool = true) {
         wallpaperTransition.begin(from: configuration.currentWallpaper)
         var failures = 0
         let options: [NSWorkspace.DesktopImageOptionKey: Any] = [.imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue, .allowClipping: true]
-        for screen in NSScreen.screens {
+        let targetScreens = allDesktops ? NSScreen.screens : [NSScreen.main].compactMap { $0 }
+        for screen in targetScreens {
             do { try NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: options) }
             catch { failures += 1 }
         }
-        // Also asks Finder/System Events to update every Mission Control desktop.
-        // NSWorkspace covers current desktops; this fills the all-Spaces gap.
-        let escaped = url.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "tell application \"System Events\" to tell every desktop to set picture to \"\(escaped)\""
-        var scriptError: NSDictionary?; NSAppleScript(source: script)?.executeAndReturnError(&scriptError)
+        if allDesktops {
+            // NSWorkspace handles visible desktops; System Events extends the
+            // change to every Mission Control desktop.
+            let escaped = url.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            let script = "tell application \"System Events\" to tell every desktop to set picture to \"\(escaped)\""
+            var scriptError: NSDictionary?; NSAppleScript(source: script)?.executeAndReturnError(&scriptError)
+        }
         if failures == 0 {
             configuration.currentWallpaper = url.path
-            statusMessage = "Wallpaper changed"
+            statusMessage = allDesktops ? "Wallpaper changed on every desktop" : "Wallpaper changed on this desktop"
             if configuration.adaptColorsToWallpaper {
                 let base = configuration.bar.palette
                 DispatchQueue.global(qos: .userInitiated).async {
