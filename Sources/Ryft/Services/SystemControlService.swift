@@ -168,7 +168,13 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
             let percent = text.range(of: #"\d+%"#, options: .regularExpression).map { String(text[$0]) } ?? "--"
             let level = Int(percent.filter(\.isNumber)) ?? -1
             let lowPower = text.localizedCaseInsensitiveContains("low power mode: 1")
-            let charging = text.localizedCaseInsensitiveContains("charging") || text.localizedCaseInsensitiveContains("charged") || text.localizedCaseInsensitiveContains("AC Power")
+            let batteryLine = text.components(separatedBy: .newlines).first { $0.contains("%") }
+            let powerState = batteryLine?.components(separatedBy: ";").dropFirst().first?
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            // Match pmset's state field exactly. Substring matching incorrectly
+            // treated "discharging" as "charging", while AC Power can be
+            // connected without the battery actively accepting a charge.
+            let charging = powerState == "charging" || powerState == "finishing charge"
             DispatchQueue.main.async { self.batteryPercent = percent; self.batteryLevel = level; self.batteryCharging = charging; self.lowPowerMode = lowPower }
         }
         runProcess("/usr/bin/pmset", ["-g", "custom"]) { text in
