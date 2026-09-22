@@ -53,7 +53,6 @@ struct SettingsView: View {
         case .bar: BarSettingsView(model: model)
         case .themes: ThemeSettingsView(model: model)
         case .modules: ModuleSettingsView(model: model)
-        case .tiling: TilingSettingsView(model: model)
         case .shortcuts: ShortcutSettingsView(model: model)
         case .wallpapers: WallpaperGalleryView(model: model, standalone: false)
         case .general: GeneralSettingsView(model: model)
@@ -75,7 +74,6 @@ private struct PageHeader: View {
         case .bar: "Shape the live desktop bar. Changes appear immediately."
         case .themes: "Choose a preset or tune every color."
         case .modules: "Decide what earns space in the bar."
-        case .tiling: "Hyprland-style window layouts using native macOS accessibility."
         case .shortcuts: "Map global controls that work from any app."
         case .wallpapers: "Pick an image for every connected display."
         case .general: "Profiles, permissions, and startup behavior."
@@ -164,16 +162,16 @@ private struct BarStylePreview: View {
         Button { model.applyBarStyle(style) } label: {
             VStack(alignment: .leading, spacing: 8) {
                 GeometryReader { proxy in
-                    let sourceWidth: CGFloat = 680
-                    let scale = proxy.size.width / sourceWidth
-                    ZStack(alignment: .topLeading) {
+                    let sourceWidth: CGFloat = 920
+                    let scale = min(1, proxy.size.width / sourceWidth)
+                    ZStack {
                         LinearGradient(colors: [Color(hex: preview.palette.muted).opacity(0.3), Color(hex: preview.palette.background).opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing)
                         BarView(model: model, notchWidth: 0, topReservedHeight: 0, configurationOverride: preview)
                             .frame(width: sourceWidth, height: preview.height + preview.outerInset * 2)
-                            .scaleEffect(scale, anchor: .topLeading).allowsHitTesting(false)
+                            .scaleEffect(scale, anchor: .center).allowsHitTesting(false)
                     }.clipped()
                 }
-                .frame(height: 82)
+                .frame(height: 104)
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 Text(style.rawValue).font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
                 Text(style.subtitle).font(.caption2).foregroundStyle(.secondary)
@@ -193,7 +191,7 @@ struct BarSettingsView: View {
             Text("This is the same renderer and configuration used on the desktop. It is shown at 1:1 point size; scroll horizontally to inspect the complete display-width layout.").font(.caption).foregroundStyle(.secondary)
         }
         SettingsGroup("Style library") {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+            LazyVStack(spacing: 12) {
                 ForEach(BuiltInBarStyle.allCases) { style in BarStylePreview(model: model, style: style) }
             }
             Divider()
@@ -406,37 +404,6 @@ private struct WidgetEditor: View {
     private func chooseImage() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowedContentTypes = [.image]
         if panel.runModal() == .OK, let path = panel.url?.path { model.configuration.bar.widgets[index].icon = path }
-    }
-}
-
-struct TilingSettingsView: View {
-    @ObservedObject var model: AppModel
-    @ObservedObject private var tiling: TilingService
-    init(model: AppModel) { self.model = model; self.tiling = model.tiling }
-    var body: some View {
-        SettingsGroup("Hyprland window manager") {
-            Toggle("Enable automatic tiling", isOn: Binding(get: { model.configuration.tiling.enabled }, set: { enabled in
-                model.configuration.tiling.enabled = enabled; model.configuration.tiling.autoTile = enabled
-            }))
-            Text("When enabled, every new standard window is tiled immediately. Closing, minimizing, launching, or changing displays automatically reflows the current Mission Control desktop.").font(.caption).foregroundStyle(.secondary)
-            Picker("Layout", selection: $model.configuration.tiling.layout) { ForEach(TilingLayout.allCases) { Text($0.rawValue).tag($0) } }
-            HStack {
-                Button("Tile now") { model.tiling.tileNow() }.buttonStyle(.borderedProminent).disabled(!model.configuration.tiling.enabled)
-                Button("Focus next") { model.tiling.focusNext() }.disabled(!model.configuration.tiling.enabled)
-                if !tiling.hasAccessibility { Button("Open Accessibility Settings…") { model.tiling.requestAccessibility() } }
-                Spacer(); Text("\(tiling.managedWindowCount) managed · \(tiling.status)").foregroundStyle(.secondary)
-            }
-        }
-        SettingsGroup("Layout geometry") {
-            ValueSlider("Inner gaps", value: $model.configuration.tiling.innerGap, range: 0...40, suffix: "pt")
-            ValueSlider("Outer gaps", value: $model.configuration.tiling.outerGap, range: 0...50, suffix: "pt")
-            if model.configuration.tiling.layout == .masterStack { ValueSlider("Master width", value: $model.configuration.tiling.masterRatio, range: 0.35...0.75, suffix: "") }
-        }
-        SettingsGroup("Floating exceptions") {
-            Text("One bundle identifier per line. Matching applications remain floating.").font(.caption).foregroundStyle(.secondary)
-            TextEditor(text: Binding(get: { model.configuration.tiling.ignoredBundleIDs.joined(separator: "\n") }, set: { model.configuration.tiling.ignoredBundleIDs = $0.components(separatedBy: .newlines).filter { !$0.isEmpty } })).font(.system(.body, design: .monospaced)).frame(minHeight: 110)
-        }
-        Text("Hyprland dwindle recursively splits the remaining leaf along its longest axis. Ryft manages only visible, resizable standard windows on the current Mission Control desktop; dialogs, sheets, fullscreen windows, other Spaces, and excluded apps remain floating. macOS Accessibility permission is required.").font(.caption).foregroundStyle(.secondary)
     }
 }
 

@@ -37,7 +37,6 @@ final class AppModel: ObservableObject {
     let controls = SystemControlService()
     lazy var notifications = NotificationDaemon(controls: controls)
     let workspaces = WorkspaceService()
-    let tiling = TilingService()
     let gemini = GeminiService()
     private let wallpaperTransition = WallpaperTransitionController()
 
@@ -62,7 +61,7 @@ final class AppModel: ObservableObject {
                 if FileManager.default.fileExists(atPath: configURL.path) { break }
             }
         }
-        if let data = try? Data(contentsOf: configURL), let decoded = try? JSONDecoder().decode(RyftConfiguration.self, from: data) {
+        if let data = Self.configurationDataRemovingUnsupportedShortcuts(at: configURL), let decoded = try? JSONDecoder().decode(RyftConfiguration.self, from: data) {
             configuration = decoded
         } else {
             configuration = RyftConfiguration()
@@ -102,9 +101,6 @@ final class AppModel: ObservableObject {
         }
         if configuration.sourcePresetVersion < 4 {
             configuration.bar.horizontalInset = 12
-            if !configuration.shortcuts.contains(where: { $0.action == .tileWindows }) {
-                configuration.shortcuts.append(ShortcutConfiguration(action: .tileWindows, key: "t", option: true, command: false, control: true))
-            }
             configuration.sourcePresetVersion = 4
         }
         if configuration.sourcePresetVersion < 5 {
@@ -133,14 +129,7 @@ final class AppModel: ObservableObject {
             configuration.bar.notchShelfCornerRadius = 0
             configuration.sourcePresetVersion = 7
         }
-        if configuration.sourcePresetVersion < 8 {
-            configuration.tiling.layout = .dwindle
-            configuration.sourcePresetVersion = 8
-        }
-        if configuration.sourcePresetVersion < 9 {
-            configuration.tiling.autoTile = configuration.tiling.enabled
-            configuration.sourcePresetVersion = 9
-        }
+        if configuration.sourcePresetVersion < 9 { configuration.sourcePresetVersion = 9 }
         if configuration.sourcePresetVersion < 10 {
             for shortcut in [
                 ShortcutConfiguration(action: .leftSidebar, key: "a"),
@@ -192,13 +181,20 @@ final class AppModel: ObservableObject {
         $configuration.dropFirst().debounce(for: .milliseconds(180), scheduler: RunLoop.main).sink { [weak self] value in
             self?.save(value)
         }.store(in: &cancellables)
-        $configuration.map(\.tiling).removeDuplicates().sink { [weak self] in self?.tiling.update($0) }.store(in: &cancellables)
         $configuration.map { ($0.wallpaperFolders + ["|"] + $0.wallpaperFiles).joined(separator: "\u{0}") }
             .removeDuplicates().dropFirst().debounce(for: .milliseconds(250), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.refreshWallpapers() }.store(in: &cancellables)
-        tiling.update(configuration.tiling)
         refreshWallpapers()
         save()
+    }
+
+    private static func configurationDataRemovingUnsupportedShortcuts(at url: URL) -> Data? {
+        guard let data = try? Data(contentsOf: url), var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return try? Data(contentsOf: url) }
+        if let shortcuts = object["shortcuts"] as? [[String: Any]] {
+            let supported = Set(ShortcutAction.allCases.map(\.rawValue))
+            object["shortcuts"] = shortcuts.filter { supported.contains($0["action"] as? String ?? "") }
+        }
+        return try? JSONSerialization.data(withJSONObject: object)
     }
 
     func save(_ value: RyftConfiguration? = nil) {
@@ -410,12 +406,12 @@ final class AppModel: ObservableObject {
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case home = "Overview", bar = "Bar", themes = "Themes", modules = "Widgets", tiling = "Tiling", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
+    case home = "Overview", bar = "Bar", themes = "Themes", modules = "Widgets", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .home: "house.fill"; case .bar: "menubar.rectangle"; case .themes: "paintpalette"; case .modules: "square.grid.2x2"
-        case .tiling: "rectangle.split.2x1"; case .shortcuts: "command"; case .wallpapers: "photo.on.rectangle.angled"; case .general: "gearshape"
+        case .shortcuts: "command"; case .wallpapers: "photo.on.rectangle.angled"; case .general: "gearshape"
         }
     }
 }

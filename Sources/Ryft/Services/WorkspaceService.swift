@@ -95,11 +95,16 @@ final class WorkspaceService: ObservableObject {
         func step(_ index: Int) {
             guard index < targets.count else {
                 originals.forEach { _ = setCurrentSpace(connection, $0.0 as CFString, $0.1) }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { self.refresh(); completion() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self.refresh(); completion() }
                 return
             }
             let target = targets[index]; _ = setCurrentSpace(connection, target.display as CFString, target.space)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { visit(target.screen); step(index + 1) }
+            // SkyLight switches immediately, but NSWorkspace needs a moment to bind
+            // desktopImageURL to the newly active managed Space.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                visit(target.screen)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { step(index + 1) }
+            }
         }
         step(0)
     }

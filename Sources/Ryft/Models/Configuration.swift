@@ -36,16 +36,6 @@ enum BuiltInBarStyle: String, CaseIterable, Identifiable {
     }
 }
 
-enum TilingLayout: String, Codable, CaseIterable, Identifiable { case dwindle = "Hyprland dwindle", masterStack = "Master + stack", columns = "Columns", grid = "Grid", monocle = "Monocle"; var id: String { rawValue } }
-struct TilingConfiguration: Codable, Equatable {
-    var enabled = false
-    var autoTile = false
-    var layout: TilingLayout = .dwindle
-    var innerGap: Double = 10
-    var outerGap: Double = 12
-    var masterRatio: Double = 0.58
-    var ignoredBundleIDs = ["com.apple.finder", "com.apple.systempreferences", "com.apple.SystemSettings"]
-}
 struct NamedBarProfile: Codable, Equatable, Identifiable {
     var id = UUID()
     var name: String
@@ -263,7 +253,7 @@ extension BarConfiguration {
 }
 
 enum ShortcutAction: String, Codable, CaseIterable, Identifiable {
-    case wallpaper = "Wallpaper gallery", toggleBar = "Toggle bar", settings = "Open settings", randomWallpaper = "Random wallpaper", tileWindows = "Tile windows", focusNextWindow = "Focus next window", toggleTiling = "Toggle auto tiling", openFinder = "Open Finder", openApplication = "Open application", runCommand = "Run command", leftSidebar = "Open AI sidebar", rightSidebar = "Open control sidebar", quitFrontmost = "Quit frontmost app"
+    case wallpaper = "Wallpaper gallery", toggleBar = "Toggle bar", settings = "Open settings", randomWallpaper = "Random wallpaper", openFinder = "Open Finder", openApplication = "Open application", runCommand = "Run command", leftSidebar = "Open AI sidebar", rightSidebar = "Open control sidebar", quitFrontmost = "Quit frontmost app"
     var id: String { rawValue }
 }
 
@@ -288,12 +278,11 @@ struct RyftConfiguration: Codable, Equatable {
     var currentWallpaper: String = ""
     var adaptColorsToWallpaper = true
     var todos: [String] = []
-    var tiling = TilingConfiguration()
     var savedBars: [NamedBarProfile] = []
     var sourcePresetVersion = 13
     var launchAtLogin = false
 
-    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, tiling, savedBars, sourcePresetVersion, launchAtLogin }
+    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -305,7 +294,6 @@ struct RyftConfiguration: Codable, Equatable {
         currentWallpaper = try c.decodeIfPresent(String.self, forKey: .currentWallpaper) ?? ""
         adaptColorsToWallpaper = try c.decodeIfPresent(Bool.self, forKey: .adaptColorsToWallpaper) ?? true
         todos = try c.decodeIfPresent([String].self, forKey: .todos) ?? []
-        tiling = try c.decodeIfPresent(TilingConfiguration.self, forKey: .tiling) ?? TilingConfiguration()
         savedBars = try c.decodeIfPresent([NamedBarProfile].self, forKey: .savedBars) ?? []
         sourcePresetVersion = try c.decodeIfPresent(Int.self, forKey: .sourcePresetVersion) ?? 0
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false

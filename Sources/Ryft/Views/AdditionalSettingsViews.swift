@@ -51,9 +51,6 @@ struct ShortcutSettingsView: View {
         case .toggleBar: model.configuration.bar.enabled.toggle()
         case .settings: NotificationCenter.default.post(name: .ryftShowSettings, object: nil)
         case .randomWallpaper: model.randomWallpaper()
-        case .tileWindows: model.tiling.tileNow()
-        case .focusNextWindow: model.tiling.focusNext()
-        case .toggleTiling: model.configuration.tiling.enabled.toggle(); model.configuration.tiling.autoTile = model.configuration.tiling.enabled
         case .openFinder: NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app"), configuration: .init())
         case .openApplication: if let path = shortcut.target { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
         case .runCommand:
@@ -139,11 +136,8 @@ struct WallpaperGalleryView: View {
             if !model.configuration.currentWallpaper.isEmpty, let image = NSImage(contentsOfFile: model.configuration.currentWallpaper) { Image(nsImage: image).resizable().scaledToFill() }
             else { Color(hex: palette.surface) }
             LinearGradient(colors: [.clear, .black.opacity(0.78)], startPoint: .center, endPoint: .bottom)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(URL(fileURLWithPath: model.configuration.currentWallpaper).lastPathComponent).font(.title3.weight(.semibold))
-                Text("\(model.wallpapers.count) wallpapers  •  \(model.configuration.favoriteWallpapers.count) favorites").font(.caption).foregroundStyle(.white.opacity(0.82))
-                Text(model.configuration.currentWallpaper).font(.caption2).foregroundStyle(.white.opacity(0.68)).lineLimit(1)
-            }.foregroundStyle(.white).padding(18)
+            Text("\(model.wallpapers.count) wallpapers  •  \(model.configuration.favoriteWallpapers.count) favorites")
+                .font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.86)).padding(18)
         }.clipped().clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
     }
     private var carouselView: some View {
@@ -213,14 +207,11 @@ private struct WallpaperTile: View {
             Button { model.setWallpaper(url) } label: {
                 ZStack(alignment: .bottomLeading) {
                     if let image = thumbnail.image { Image(nsImage: image).resizable().scaledToFill() } else { Color(hex: model.configuration.bar.palette.surface); ProgressView() }
-                    LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
-                    Text(url.deletingPathExtension().lastPathComponent).font(.caption.weight(.semibold)).foregroundStyle(.white).lineLimit(1).padding(12)
                 }
             }.buttonStyle(.plain).frame(maxWidth: .infinity, maxHeight: .infinity)
             Button { model.toggleFavorite(url) } label: { Image(systemName: model.isFavorite(url) ? "heart.fill" : "heart").foregroundStyle(.white).frame(width: 30, height: 30).background(.black.opacity(0.52)).clipShape(Circle()) }.buttonStyle(.plain).padding(10)
         }.clipped().clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 17).stroke(selected || model.configuration.currentWallpaper == url.path ? Color(hex: model.configuration.bar.palette.accent) : .clear, lineWidth: selected ? 4 : 3))
-            .help("Set \(url.lastPathComponent) on every display")
     }
 }
 
@@ -237,10 +228,12 @@ struct GeneralSettingsView: View {
             Text("Saved to ~/Library/Application Support/Ryft/config.json. Profiles include the bar, widgets, blur, colors, shortcuts, favorites, tasks, and wallpaper sources.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
         SettingsGroup("Desktop integration") {
-            LabeledContent("Global shortcut", value: "Option + W")
             LabeledContent("Bar engine", value: "Native AppKit + SwiftUI")
             LabeledContent("Imported preset", value: "Sebastian II")
             Text("Sebastian II is ported from github.com/sebastianmiletic/hyprland-dotfiles at commit bb7de91. The upstream desktop uses Quickshell, not Waybar, so Ryft maps its layout and palette to native macOS modules.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
+        Divider().padding(.vertical, 4)
+        Button(role: .destructive) { NSApp.terminate(nil) } label: { Label("Quit Ryft", systemImage: "power").frame(maxWidth: .infinity) }
+            .buttonStyle(.bordered).controlSize(.large)
     }
 }

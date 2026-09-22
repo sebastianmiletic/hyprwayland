@@ -10,7 +10,10 @@ final class BarPanelController {
         let interactionID = UUID()
         @Published var notchWidth: Double
         @Published var topReservedHeight: Double
-        init(notchWidth: Double, topReservedHeight: Double) { self.notchWidth = notchWidth; self.topReservedHeight = topReservedHeight }
+        @Published var screenSize: CGSize
+        init(notchWidth: Double, topReservedHeight: Double, screenSize: CGSize) {
+            self.notchWidth = notchWidth; self.topReservedHeight = topReservedHeight; self.screenSize = screenSize
+        }
     }
     private struct PanelEntry {
         let screenID: NSNumber
@@ -59,7 +62,7 @@ final class BarPanelController {
     }
 
     private func makeEntry(on screen: NSScreen, id: NSNumber, config: BarConfiguration) -> PanelEntry {
-        let context = PanelContext(notchWidth: notchWidth(for: screen, config: config), topReservedHeight: topReservedHeight(for: screen, config: config))
+        let context = PanelContext(notchWidth: notchWidth(for: screen, config: config), topReservedHeight: topReservedHeight(for: screen, config: config), screenSize: screen.frame.size)
         let panel = InteractiveBarPanel(contentRect: panelFrame(on: screen, config: config), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
         panel.backgroundColor = .clear
@@ -83,6 +86,7 @@ final class BarPanelController {
         let newReservedHeight = topReservedHeight(for: screen, config: config)
         if entry.context.notchWidth != newNotch { entry.context.notchWidth = newNotch }
         if entry.context.topReservedHeight != newReservedHeight { entry.context.topReservedHeight = newReservedHeight }
+        if entry.context.screenSize != screen.frame.size { entry.context.screenSize = screen.frame.size }
         let frame = panelFrame(on: screen, config: config)
         if !entry.panel.frame.equalTo(frame) { entry.panel.setFrame(frame, display: true, animate: false) }
         if !entry.panel.isVisible { entry.panel.orderFrontRegardless() }
@@ -146,7 +150,43 @@ final class BarPanelController {
     private struct StableBarRoot: View {
         @ObservedObject var model: AppModel
         @ObservedObject var context: PanelContext
-        var body: some View { BarView(model: model, notchWidth: context.notchWidth, topReservedHeight: context.topReservedHeight, interactionID: context.interactionID).frame(maxWidth: .infinity, maxHeight: .infinity) }
+        var body: some View {
+            ZStack {
+                if model.configuration.bar.position == .top {
+                    WallpaperMenuBarCover(path: model.configuration.currentWallpaper, screenSize: context.screenSize)
+                }
+                BarView(model: model, notchWidth: context.notchWidth, topReservedHeight: context.topReservedHeight, interactionID: context.interactionID)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private struct WallpaperMenuBarCover: NSViewRepresentable {
+    let path: String
+    let screenSize: CGSize
+    func makeNSView(context: Context) -> WallpaperCropView { WallpaperCropView() }
+    func updateNSView(_ view: WallpaperCropView, context: Context) {
+        view.image = NSImage(contentsOfFile: path)
+        view.screenSize = screenSize
+        view.needsDisplay = true
+    }
+}
+
+private final class WallpaperCropView: NSView {
+    var image: NSImage?
+    var screenSize: CGSize = .zero
+    override var isOpaque: Bool { image != nil }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let image, screenSize.width > 0, screenSize.height > 0, image.size.width > 0, image.size.height > 0 else { return }
+        let scale = max(screenSize.width / image.size.width, screenSize.height / image.size.height)
+        let drawn = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let destination = CGRect(
+            x: (screenSize.width - drawn.width) / 2,
+            y: bounds.height - (screenSize.height + drawn.height) / 2,
+            width: drawn.width,
+            height: drawn.height
+        )
+        image.draw(in: destination, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
     }
 }
 

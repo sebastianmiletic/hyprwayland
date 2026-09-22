@@ -397,8 +397,6 @@ private struct WallpaperBarCard: View {
         Button(action: action) {
             ZStack(alignment: .bottomLeading) {
                 if let image = thumbnail.image { Image(nsImage: image).resizable().scaledToFill() } else { Color.black.opacity(0.18); Image(systemName: "photo").foregroundStyle(.white.opacity(0.45)) }
-                LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .center, endPoint: .bottom)
-                Text(url.deletingPathExtension().lastPathComponent).font(.caption2.weight(.semibold)).foregroundStyle(.white).lineLimit(1).padding(8)
             }.frame(width: selected ? 166 : 150, height: selected ? 108 : 96).clipped().clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 13).stroke(.white.opacity(selected ? 0.95 : 0.15), lineWidth: selected ? 3 : 1))
                 .animation(.easeOut(duration: 0.16), value: selected)

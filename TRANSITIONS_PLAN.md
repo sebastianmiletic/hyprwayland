@@ -76,7 +76,7 @@ Repeated next/previous commands update the queued destination rather than spawni
 
 ## Settings
 
-Add a **Workspace transitions** section under General or Tiling:
+Add a **Workspace transitions** section under General:
 
 - Enable Ryft transitions
 - Style: Slide, Hyprland slide, Fade, Instant
@@ -107,7 +107,7 @@ Test:
 - Reduce Motion
 - missing and revoked Screen Recording permission
 - sleep/wake and display hot-plugging
-- animation cancellation when Ryft quits or tiling is disabled
+- animation cancellation when Ryft quits or the feature is disabled
 
 ## Acceptance boundary
 
