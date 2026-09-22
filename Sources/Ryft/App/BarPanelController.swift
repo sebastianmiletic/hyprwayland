@@ -11,8 +11,12 @@ final class BarPanelController {
         @Published var notchWidth: Double
         @Published var topReservedHeight: Double
         @Published var screenSize: CGSize
-        init(notchWidth: Double, topReservedHeight: Double, screenSize: CGSize) {
-            self.notchWidth = notchWidth; self.topReservedHeight = topReservedHeight; self.screenSize = screenSize
+        @Published var wallpaperPath: String
+        init(notchWidth: Double, topReservedHeight: Double, screenSize: CGSize, wallpaperPath: String) {
+            self.notchWidth = notchWidth
+            self.topReservedHeight = topReservedHeight
+            self.screenSize = screenSize
+            self.wallpaperPath = wallpaperPath
         }
     }
     private struct PanelEntry {
@@ -31,6 +35,12 @@ final class BarPanelController {
         model.$configuration.map(\.bar).sink { [weak self] config in self?.synchronize(config) }.store(in: &cancellables)
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .sink { [weak self] _ in self?.synchronize(self?.model.configuration.bar) }.store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .ryftWallpaperChanged)
+            .sink { [weak self] _ in self?.synchronize(self?.model.configuration.bar) }.store(in: &cancellables)
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
+            .sink { [weak self] _ in self?.synchronize(self?.model.configuration.bar) }.store(in: &cancellables)
+        Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+            .sink { [weak self] _ in self?.refreshWallpaperPaths() }.store(in: &cancellables)
         synchronize(model.configuration.bar)
     }
 
@@ -62,7 +72,12 @@ final class BarPanelController {
     }
 
     private func makeEntry(on screen: NSScreen, id: NSNumber, config: BarConfiguration) -> PanelEntry {
-        let context = PanelContext(notchWidth: notchWidth(for: screen, config: config), topReservedHeight: topReservedHeight(for: screen, config: config), screenSize: screen.frame.size)
+        let context = PanelContext(
+            notchWidth: notchWidth(for: screen, config: config),
+            topReservedHeight: topReservedHeight(for: screen, config: config),
+            screenSize: screen.frame.size,
+            wallpaperPath: wallpaperPath(for: screen)
+        )
         let panel = InteractiveBarPanel(contentRect: panelFrame(on: screen, config: config), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
         panel.backgroundColor = .clear
@@ -87,6 +102,8 @@ final class BarPanelController {
         if entry.context.notchWidth != newNotch { entry.context.notchWidth = newNotch }
         if entry.context.topReservedHeight != newReservedHeight { entry.context.topReservedHeight = newReservedHeight }
         if entry.context.screenSize != screen.frame.size { entry.context.screenSize = screen.frame.size }
+        let newWallpaperPath = wallpaperPath(for: screen)
+        if entry.context.wallpaperPath != newWallpaperPath { entry.context.wallpaperPath = newWallpaperPath }
         let frame = panelFrame(on: screen, config: config)
         if !entry.panel.frame.equalTo(frame) { entry.panel.setFrame(frame, display: true, animate: false) }
         if !entry.panel.isVisible { entry.panel.orderFrontRegardless() }
@@ -132,6 +149,18 @@ final class BarPanelController {
         return max(screen.safeAreaInsets.top, 32)
     }
 
+    private func wallpaperPath(for screen: NSScreen) -> String {
+        NSWorkspace.shared.desktopImageURL(for: screen)?.path ?? model.configuration.currentWallpaper
+    }
+
+    private func refreshWallpaperPaths() {
+        for entry in entries {
+            guard let screen = NSScreen.screens.first(where: { screenID($0) == entry.screenID }) else { continue }
+            let path = wallpaperPath(for: screen)
+            if entry.context.wallpaperPath != path { entry.context.wallpaperPath = path }
+        }
+    }
+
     private func screenID(_ screen: NSScreen) -> NSNumber? { screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber }
 
     private struct DisplayCornerMask: View {
@@ -153,7 +182,7 @@ final class BarPanelController {
         var body: some View {
             ZStack {
                 if model.configuration.bar.position == .top {
-                    WallpaperMenuBarCover(path: model.configuration.currentWallpaper, screenSize: context.screenSize)
+                    WallpaperMenuBarCover(path: context.wallpaperPath, screenSize: context.screenSize)
                 }
                 BarView(model: model, notchWidth: context.notchWidth, topReservedHeight: context.topReservedHeight, interactionID: context.interactionID)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -166,13 +195,17 @@ private struct WallpaperMenuBarCover: NSViewRepresentable {
     let screenSize: CGSize
     func makeNSView(context: Context) -> WallpaperCropView { WallpaperCropView() }
     func updateNSView(_ view: WallpaperCropView, context: Context) {
-        view.image = NSImage(contentsOfFile: path)
-        view.screenSize = screenSize
+        if view.path != path {
+            view.path = path
+            view.image = NSImage(contentsOfFile: path)
+        }
+        if view.screenSize != screenSize { view.screenSize = screenSize }
         view.needsDisplay = true
     }
 }
 
 private final class WallpaperCropView: NSView {
+    var path = ""
     var image: NSImage?
     var screenSize: CGSize = .zero
     override var isOpaque: Bool { image != nil }
