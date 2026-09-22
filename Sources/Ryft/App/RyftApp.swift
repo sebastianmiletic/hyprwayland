@@ -9,7 +9,7 @@ struct RyftApp: App {
 
     var body: some Scene {
         WindowGroup("Ryft") { SettingsView(model: model) }
-            .defaultSize(width: 1050, height: 720)
+            .defaultSize(width: 930, height: 640)
             .commands {
                 CommandGroup(after: .appInfo) {
                     Button("Toggle Desktop Bar") { model.configuration.bar.enabled.toggle() }.keyboardShortcut("b", modifiers: [.option])
@@ -50,7 +50,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in NSMenu.setMenuBarVisible(false) })
         installStatusItem()
         NSMenu.setMenuBarVisible(false)
-        DispatchQueue.main.async { [weak self] in self?.captureSettingsWindow() }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.captureSettingsWindow()
+            if !model.configuration.hasCompletedOnboarding {
+                model.selectedSection = .permissions
+                if self.settingsWindow?.isVisible != true { self.showSettings() }
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -61,22 +68,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captureSettingsWindow()
         guard let settingsWindow, !settingsAnimationInProgress else { return }
         if settingsWindow.isVisible { hideSettings(); return }
-        AppModel.shared.selectedSection = .home
+        if AppModel.shared.configuration.hasCompletedOnboarding { AppModel.shared.selectedSection = .home }
+        else { AppModel.shared.selectedSection = .permissions }
         NSApp.activate(ignoringOtherApps: true)
-        let targetFrame = settingsWindow.frame
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             settingsWindow.alphaValue = 1; settingsWindow.makeKeyAndOrderFront(nil); settingsWindow.orderFrontRegardless()
             return
         }
         settingsAnimationInProgress = true
+        settingsWindow.contentView?.wantsLayer = true
+        let layer = settingsWindow.contentView?.layer
+        let startTransform = CATransform3DConcat(CATransform3DMakeScale(0.992, 0.992, 1), CATransform3DMakeTranslation(0, -7, 0))
+        layer?.transform = CATransform3DIdentity
+        let transform = CABasicAnimation(keyPath: "transform")
+        transform.fromValue = NSValue(caTransform3D: startTransform); transform.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        transform.duration = 0.22; transform.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+        layer?.add(transform, forKey: "ryft.settings.open")
         settingsWindow.alphaValue = 0
-        settingsWindow.setFrame(targetFrame.offsetBy(dx: 0, dy: -8), display: false)
         settingsWindow.makeKeyAndOrderFront(nil); settingsWindow.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.22
-            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+            context.duration = 0.2; context.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
             settingsWindow.animator().alphaValue = 1
-            settingsWindow.animator().setFrame(targetFrame, display: true)
         } completionHandler: { [weak self] in self?.settingsAnimationInProgress = false }
     }
 
@@ -89,6 +101,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.level = .floating
         settingsWindow.hidesOnDeactivate = false
         settingsWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        let compactFrameKey = "RyftAppliedCompactSettingsFrame"
+        if !UserDefaults.standard.bool(forKey: compactFrameKey) {
+            settingsWindow.setContentSize(NSSize(width: 930, height: 640)); settingsWindow.center()
+            UserDefaults.standard.set(true, forKey: compactFrameKey)
+        }
+        settingsWindow.isOpaque = false
+        settingsWindow.backgroundColor = .clear
+        settingsWindow.titlebarAppearsTransparent = true
         settingsWindow.standardWindowButton(.closeButton)?.target = self
         settingsWindow.standardWindowButton(.closeButton)?.action = #selector(closeSettingsWindow)
     }
@@ -98,15 +118,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let settingsWindow, settingsWindow.isVisible, !settingsAnimationInProgress else { return }
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { settingsWindow.orderOut(nil); return }
         settingsAnimationInProgress = true
-        let targetFrame = settingsWindow.frame
+        settingsWindow.contentView?.wantsLayer = true
+        let layer = settingsWindow.contentView?.layer
+        let endTransform = CATransform3DConcat(CATransform3DMakeScale(0.994, 0.994, 1), CATransform3DMakeTranslation(0, -5, 0))
+        let transform = CABasicAnimation(keyPath: "transform")
+        transform.fromValue = NSValue(caTransform3D: CATransform3DIdentity); transform.toValue = NSValue(caTransform3D: endTransform)
+        transform.duration = 0.15; transform.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 1, 0.5, 1)
+        layer?.add(transform, forKey: "ryft.settings.close")
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            context.duration = 0.15; context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             settingsWindow.animator().alphaValue = 0
-            settingsWindow.animator().setFrame(targetFrame.offsetBy(dx: 0, dy: -6), display: true)
         } completionHandler: { [weak self, weak settingsWindow] in
             settingsWindow?.orderOut(nil); settingsWindow?.alphaValue = 1
-            settingsWindow?.setFrame(targetFrame, display: false)
+            settingsWindow?.contentView?.layer?.removeAllAnimations()
             self?.settingsAnimationInProgress = false
         }
     }

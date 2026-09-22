@@ -15,7 +15,7 @@ final class SidePanelController {
         self.leftPanel = makePanel(side: .left)
         self.rightPanel = makePanel(side: .right)
         activityMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .keyDown, .scrollWheel]) { [weak self] event in
-            if self?.leftPanel?.isVisible == true || self?.rightPanel?.isVisible == true { self?.resetInactivityTimer() }
+            if self?.rightPanel?.isVisible == true { self?.resetControlsInactivityTimer() }
             return event
         }
     }
@@ -40,16 +40,14 @@ final class SidePanelController {
         rightPanel = panel; present(panel, side: .right)
     }
 
-    private func resetInactivityTimer() {
+    private func resetControlsInactivityTimer() {
         inactivityTask?.cancel()
-        let task = DispatchWorkItem { [weak self] in self?.dismissVisiblePanelAfterInactivity() }
+        let task = DispatchWorkItem { [weak self] in
+            guard let self, let rightPanel = self.rightPanel, rightPanel.isVisible else { return }
+            self.dismiss(rightPanel, side: .right)
+        }
         inactivityTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
-    }
-
-    private func dismissVisiblePanelAfterInactivity() {
-        if let leftPanel, leftPanel.isVisible { dismiss(leftPanel, side: .left) }
-        if let rightPanel, rightPanel.isVisible { dismiss(rightPanel, side: .right) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: task)
     }
 
     private enum Side { case left, right }
@@ -65,32 +63,52 @@ final class SidePanelController {
     private func targetFrame(side: Side) -> NSRect {
         guard let screen = NSScreen.main else { return .zero }
         let screenFrame = screen.visibleFrame
-        let margin: CGFloat = 5
+        let margin: CGFloat = 7
+        let bar = model.configuration.bar
+        let shelf = bar.notchMaskEnabled ? (bar.notchMaskHeight > 0 ? bar.notchMaskHeight : Double(screen.safeAreaInsets.top)) : 0
+        let barClearance = bar.enabled && bar.position == .top ? CGFloat(bar.height + bar.outerInset * 2 + shelf) + 6 : 18
+        let top = min(screenFrame.maxY - 10, screen.frame.maxY - barClearance)
         let width: CGFloat = 420
         let x = side == .left ? screenFrame.minX + margin : screenFrame.maxX - width - margin
-        return NSRect(x: x, y: screenFrame.minY + margin, width: width, height: screenFrame.height - margin * 2)
+        return NSRect(x: x, y: screenFrame.minY + margin, width: width, height: max(320, top - screenFrame.minY - margin))
     }
     private func present(_ panel: NSPanel, side: Side) {
         let target = targetFrame(side: side)
         let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        var start = target; start.origin.x += side == .left ? -22 : 22
-        panel.setFrame(reduced ? target : start, display: true); panel.alphaValue = reduced ? 1 : 0
-        NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil); panel.orderFrontRegardless(); resetInactivityTimer()
+        panel.setFrame(target, display: true)
+        panel.contentView?.wantsLayer = true
+        guard let layer = panel.contentView?.layer else { panel.makeKeyAndOrderFront(nil); return }
+        layer.removeAllAnimations()
+        layer.transform = reduced ? CATransform3DIdentity : CATransform3DMakeTranslation(side == .left ? -24 : 24, 0, 0)
+        layer.opacity = reduced ? 1 : 0
+        NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil); panel.orderFrontRegardless()
+        if side == .right { resetControlsInactivityTimer() } else { inactivityTask?.cancel() }
         guard !reduced else { return }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.21; context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrame(target, display: true); panel.animator().alphaValue = 1
-        }
+        let timing = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
+        let movement = CABasicAnimation(keyPath: "transform")
+        movement.fromValue = NSValue(caTransform3D: layer.transform); movement.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        movement.duration = 0.24; movement.timingFunction = timing
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0; fade.toValue = 1; fade.duration = 0.18; fade.timingFunction = timing
+        layer.transform = CATransform3DIdentity; layer.opacity = 1
+        layer.add(movement, forKey: "ryft.panel.open.transform"); layer.add(fade, forKey: "ryft.panel.open.opacity")
     }
     private func dismiss(_ panel: NSPanel, side: Side) {
         guard panel.isVisible else { return }
         inactivityTask?.cancel()
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { panel.orderOut(nil); return }
-        var target = panel.frame; target.origin.x += side == .left ? -16 : 16
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.22; context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrame(target, display: true); panel.animator().alphaValue = 0
-        }, completionHandler: { panel.orderOut(nil); panel.alphaValue = 1 })
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, let layer = panel.contentView?.layer else { panel.orderOut(nil); return }
+        layer.removeAllAnimations()
+        let endTransform = CATransform3DMakeTranslation(side == .left ? -18 : 18, 0, 0)
+        let timing = CAMediaTimingFunction(controlPoints: 0.25, 1, 0.5, 1)
+        let movement = CABasicAnimation(keyPath: "transform")
+        movement.fromValue = NSValue(caTransform3D: CATransform3DIdentity); movement.toValue = NSValue(caTransform3D: endTransform)
+        movement.duration = 0.17; movement.timingFunction = timing
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 1; fade.toValue = 0; fade.duration = 0.15; fade.timingFunction = timing
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { panel.orderOut(nil); layer.removeAllAnimations(); layer.transform = CATransform3DIdentity; layer.opacity = 1 }
+        layer.add(movement, forKey: "ryft.panel.close.transform"); layer.add(fade, forKey: "ryft.panel.close.opacity")
+        CATransaction.commit()
     }
 }
 

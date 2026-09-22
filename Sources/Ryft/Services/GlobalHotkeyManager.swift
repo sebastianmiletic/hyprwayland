@@ -114,11 +114,8 @@ final class GlobalHotkeyManager {
             return Unmanaged.passUnretained(event)
         }
         eventTap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly, eventsOfInterest: mask, callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque())
-        if eventTap == nil, !CGPreflightListenEventAccess(), !UserDefaults.standard.bool(forKey: "RyftRequestedInputMonitoring") {
-            UserDefaults.standard.set(true, forKey: "RyftRequestedInputMonitoring")
-            _ = CGRequestListenEventAccess()
-            eventTap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly, eventsOfInterest: mask, callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque())
-        }
+        // Never prompt during launch. The first-run Permissions page lets the
+        // user request Input Monitoring explicitly and explains why it is used.
         guard let eventTap else { NSLog("Ryft global event tap is unavailable; enable Input Monitoring for Ryft") ; return }
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0); eventTapSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes); CGEvent.tapEnable(tap: eventTap, enable: true)

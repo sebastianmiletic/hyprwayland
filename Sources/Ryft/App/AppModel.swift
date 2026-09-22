@@ -184,6 +184,7 @@ final class AppModel: ObservableObject {
         $configuration.map { ($0.wallpaperFolders + ["|"] + $0.wallpaperFiles).joined(separator: "\u{0}") }
             .removeDuplicates().dropFirst().debounce(for: .milliseconds(250), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.refreshWallpapers() }.store(in: &cancellables)
+        if !configuration.hasCompletedOnboarding { selectedSection = .permissions }
         refreshWallpapers()
         save()
     }
@@ -406,11 +407,12 @@ final class AppModel: ObservableObject {
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case home = "Overview", bar = "Bar", themes = "Themes", modules = "Widgets", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
+    case home = "Overview", permissions = "Permissions", guide = "Quick Start", bar = "Bar", themes = "Themes", modules = "Widgets", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
     var id: String { rawValue }
     var symbol: String {
         switch self {
-        case .home: "house.fill"; case .bar: "menubar.rectangle"; case .themes: "paintpalette"; case .modules: "square.grid.2x2"
+        case .home: "house.fill"; case .permissions: "hand.raised.fill"; case .guide: "lightbulb.fill"
+        case .bar: "menubar.rectangle"; case .themes: "paintpalette"; case .modules: "square.grid.2x2"
         case .shortcuts: "command"; case .wallpapers: "photo.on.rectangle.angled"; case .general: "gearshape"
         }
     }

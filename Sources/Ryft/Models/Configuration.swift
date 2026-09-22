@@ -281,8 +281,9 @@ struct RyftConfiguration: Codable, Equatable {
     var savedBars: [NamedBarProfile] = []
     var sourcePresetVersion = 13
     var launchAtLogin = false
+    var hasCompletedOnboarding = false
 
-    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin }
+    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin, hasCompletedOnboarding }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -297,6 +298,9 @@ struct RyftConfiguration: Codable, Equatable {
         savedBars = try c.decodeIfPresent([NamedBarProfile].self, forKey: .savedBars) ?? []
         sourcePresetVersion = try c.decodeIfPresent(Int.self, forKey: .sourcePresetVersion) ?? 0
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+        // Existing installations have already reached the product. Only a
+        // genuinely new configuration enters first-run onboarding.
+        hasCompletedOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding) ?? true
     }
 }
 

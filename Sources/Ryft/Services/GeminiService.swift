@@ -1,13 +1,14 @@
 import AppKit
 import Foundation
 import Security
+import LocalAuthentication
 
-struct ChatMessage: Identifiable, Equatable {
-    let id = UUID()
+struct ChatMessage: Identifiable, Equatable, Codable {
+    let id: UUID
     let role: String
     let text: String
     let model: String?
-    init(role: String, text: String, model: String? = nil) { self.role = role; self.text = text; self.model = model }
+    init(id: UUID = UUID(), role: String, text: String, model: String? = nil) { self.id = id; self.role = role; self.text = text; self.model = model }
 }
 
 struct GeminiModelUsage: Identifiable {
@@ -51,13 +52,17 @@ final class GeminiService: ObservableObject {
     private var usageCounts: [String: Int] = [:]
     private var usageDate = ""
     private let usageURL: URL
+    private let historyURL: URL
+    private var requestTask: URLSessionDataTask?
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Ryft", isDirectory: true)
         try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         usageURL = support.appendingPathComponent("ai-model-usage.json")
+        historyURL = support.appendingPathComponent("ai-conversation.json")
         hasAPIKey = keychain.read() != nil
         loadUsage()
+        loadHistory()
     }
 
     var currentModelName: String { models.first(where: { $0.id == currentModelID })?.name ?? "Automatic" }
@@ -76,11 +81,30 @@ final class GeminiService: ObservableObject {
         keychain.remove(); hasAPIKey = false; apiKeyDraft = ""
     }
 
+    func newConversation() {
+        requestTask?.cancel(); requestTask = nil; isLoading = false; errorMessage = ""
+        messages = [ChatMessage(role: "model", text: "Hi. I’m ready when you are.")]
+        saveHistory()
+    }
+
+    func stop() {
+        requestTask?.cancel(); requestTask = nil; isLoading = false
+    }
+
+    func copyLastResponse() {
+        guard let text = messages.last(where: { $0.role == "model" })?.text else { return }
+        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    func openAIStudio() {
+        if let url = URL(string: "https://aistudio.google.com/app/apikey") { NSWorkspace.shared.open(url) }
+    }
+
     func send() {
         let prompt = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty, !isLoading else { return }
         guard let apiKey = keychain.read() else { hasAPIKey = false; errorMessage = "Add a Gemini API key first."; return }
-        hasAPIKey = true; messages.append(ChatMessage(role: "user", text: prompt)); draft = ""; isLoading = true; errorMessage = ""
+        hasAPIKey = true; messages.append(ChatMessage(role: "user", text: prompt)); saveHistory(); draft = ""; isLoading = true; errorMessage = ""
         resetUsageIfNeeded()
         guard let first = models.firstIndex(where: { usageCounts[$0.id, default: 0] < $0.quota }) else {
             isLoading = false; errorMessage = "No AI model quota is currently available."; return
@@ -105,9 +129,11 @@ final class GeminiService: ObservableObject {
         ]
         do { request.httpBody = try JSONSerialization.data(withJSONObject: payload) }
         catch { isLoading = false; errorMessage = error.localizedDescription; return }
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        requestTask = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.requestTask = nil
+                if let urlError = error as? URLError, urlError.code == .cancelled { self.isLoading = false; return }
                 if let error { self.isLoading = false; self.errorMessage = error.localizedDescription; return }
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                 let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
@@ -127,9 +153,10 @@ final class GeminiService: ObservableObject {
                     self.inputTokens = usage["promptTokenCount"] as? Int ?? 0
                     self.outputTokens = usage["candidatesTokenCount"] as? Int ?? 0
                 }
-                self.messages.append(ChatMessage(role: "model", text: self.humanize(text), model: model.id)); self.isLoading = false; self.errorMessage = ""
+                self.messages.append(ChatMessage(role: "model", text: self.humanize(text), model: model.id)); self.isLoading = false; self.errorMessage = ""; self.saveHistory()
             }
-        }.resume()
+        }
+        requestTask?.resume()
     }
 
     private func failover(apiKey: String, failed: GeminiModel, next: Int, finalMessage: String? = nil) {
@@ -159,6 +186,16 @@ final class GeminiService: ObservableObject {
     }
 
     private func publishUsage() { modelUsages = models.map { GeminiModelUsage(id: $0.id, name: $0.name, used: usageCounts[$0.id, default: 0], quota: $0.quota) } }
+
+    private func loadHistory() {
+        guard let data = try? Data(contentsOf: historyURL), let saved = try? JSONDecoder().decode([ChatMessage].self, from: data), !saved.isEmpty else { return }
+        messages = Array(saved.suffix(80))
+    }
+
+    private func saveHistory() {
+        guard let data = try? JSONEncoder().encode(Array(messages.suffix(80))) else { return }
+        try? data.write(to: historyURL, options: .atomic)
+    }
 
     private func apiError(_ json: [String: Any]?) -> String? { (json?["error"] as? [String: Any])?["message"] as? String }
     private func humanize(_ text: String) -> String { text.replacingOccurrences(of: "$", with: "").replacingOccurrences(of: #"\\\(|\\\)|\\\[|\\\]"#, with: "", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -200,28 +237,32 @@ final class GeminiService: ObservableObject {
 
 private final class GeminiKeychain {
     private let service = "com.sebastianmiletic.ryft.gemini"
-    private let account = "default"
+    // A new account avoids inheriting access-control lists from development
+    // builds that could trigger a macOS login-password dialog. Users paste the
+    // API key once; stable signed updates can then read it without interaction.
+    private let account = "assistant-v2"
     func read() -> String? {
-        if let value = read(service: service) { return value }
-        let legacy = ["com.sebastianmiletic." + "hypr" + "shell.gemini", "com.sebastianmiletic." + "way" + "code.gemini"]
-        for oldService in legacy where oldService != service {
-            if let value = read(service: oldService) { _ = write(value); return value }
-        }
-        return nil
-    }
-    private func read(service: String) -> String? {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+        let context = LAContext(); context.interactionNotAllowed = true
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne, kSecUseAuthenticationContext as String: context, "u_AuthUI": "u_AuthUIF"]
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
     @discardableResult func write(_ value: String) -> Bool {
-        remove()
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock, kSecValueData as String: Data(value.utf8)]
-        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+        let context = LAContext(); context.interactionNotAllowed = true
+        let match: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecUseAuthenticationContext as String: context, "u_AuthUI": "u_AuthUIF"]
+        let attributes: [String: Any] = [kSecValueData as String: Data(value.utf8), kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+        let updated = SecItemUpdate(match as CFDictionary, attributes as CFDictionary)
+        if updated == errSecSuccess { return true }
+        guard updated == errSecItemNotFound else { return false }
+        var item = match
+        item[kSecValueData as String] = Data(value.utf8)
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
     }
     func remove() {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
+        let context = LAContext(); context.interactionNotAllowed = true
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account, kSecUseAuthenticationContext as String: context, "u_AuthUI": "u_AuthUIF"]
         SecItemDelete(query as CFDictionary)
     }
 }

@@ -31,6 +31,10 @@ final class NotificationDaemon: NSObject, ObservableObject, UNUserNotificationCe
 
     func refreshAuthorization() { configureAuthorization() }
 
+    func requestAuthorization() {
+        center.requestAuthorization(options: [.alert, .sound]) { [weak self] _, _ in self?.configureAuthorization() }
+    }
+
     private func configureAuthorization() {
         center.getNotificationSettings { [weak self] settings in
             guard let self else { return }

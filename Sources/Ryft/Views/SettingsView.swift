@@ -25,7 +25,7 @@ struct SettingsView: View {
                 Spacer()
                 HStack { Circle().fill(Color(hex: model.configuration.bar.palette.success)).frame(width: 7, height: 7); Text(model.statusMessage).lineLimit(1); Spacer() }
                     .font(.caption).foregroundStyle(.secondary).padding(10).background(Color.primary.opacity(0.04)).clipShape(RoundedRectangle(cornerRadius: 9))
-            }.padding(12).frame(minWidth: 190).background(Color.primary.opacity(0.025))
+            }.padding(10).frame(minWidth: 174).background(.ultraThinMaterial)
         } detail: {
             VStack(spacing: 0) {
                 if model.selectedSection == .modules {
@@ -38,18 +38,21 @@ struct SettingsView: View {
                         PageHeader(section: model.selectedSection)
                         page
                     }
-                    .padding(28)
-                    .frame(maxWidth: 860, alignment: .leading)
+                    .padding(22)
+                    .frame(maxWidth: 800, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
-            }.background(Color.primary.opacity(0.015))
+            }.background(Color.primary.opacity(0.018))
         }
-        .frame(minWidth: 920, minHeight: 650)
+        .background(.regularMaterial)
+        .frame(minWidth: 820, minHeight: 560)
     }
 
     @ViewBuilder private var page: some View {
         switch model.selectedSection {
         case .home: HomeSettingsView(model: model)
+        case .permissions: PermissionsSettingsView(model: model)
+        case .guide: QuickStartSettingsView(model: model)
         case .bar: BarSettingsView(model: model)
         case .themes: ThemeSettingsView(model: model)
         case .modules: ModuleSettingsView(model: model)
@@ -71,6 +74,8 @@ private struct PageHeader: View {
     private var subtitle: String {
         switch section {
         case .home: "Your desktop, wallpaper, and Mac at a glance."
+        case .permissions: "Control exactly which macOS features Ryft can access."
+        case .guide: "The essential controls, shortcuts, and everyday workflow."
         case .bar: "Shape the live desktop bar. Changes appear immediately."
         case .themes: "Choose a preset or tune every color."
         case .modules: "Decide what earns space in the bar."
@@ -89,8 +94,8 @@ struct SettingsGroup<Content: View>: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.secondary).tracking(0.7)
             content
-        }.padding(18).background(Color.primary.opacity(0.045)).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(.primary.opacity(0.08)))
+        }.padding(16).background(Color.primary.opacity(0.035)).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(.primary.opacity(0.075)))
     }
 }
 
