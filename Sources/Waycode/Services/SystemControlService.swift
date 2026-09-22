@@ -31,13 +31,17 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     @Published var batteryCharging = false
     @Published var operationMessage = ""
 
-    private let locationManager = CLLocationManager()
+    // Core Location must be created after NSApplication has finished launching.
+    // Constructing it during SwiftUI's early model initialization gives
+    // locationd an empty bundle identity, so macOS cannot persist its decision.
+    private lazy var locationManager: CLLocationManager = {
+        let manager = CLLocationManager(); manager.delegate = self; return manager
+    }()
     private var levelTimer: Timer?
     private var powerTimer: Timer?
 
     override init() {
         super.init()
-        locationManager.delegate = self
         refreshAll()
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { [weak self] _ in self?.refreshOutputLevel() }
         powerTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.refreshPowerState() }
@@ -49,12 +53,19 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     }
 
     func requestWiFiAccessAndScan() {
-        if locationManager.authorizationStatus == .notDetermined { locationManager.requestWhenInUseAuthorization() }
-        scanWiFi()
+        // Never trigger Core Location's sheet from a Wi-Fi click. If the user
+        // has already granted access, scan normally; otherwise keep the basic
+        // Wi-Fi toggle/status useful without repeatedly asking.
+        switch locationManager.authorizationStatus {
+        case .authorized, .authorizedAlways: scanWiFi()
+        case .notDetermined: operationMessage = "Nearby network names need Location access. Waycode will not ask automatically."
+        case .denied, .restricted: operationMessage = "Nearby network names are unavailable; Wi-Fi controls still work."
+        @unknown default: operationMessage = "Nearby network names are unavailable."
+        }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        if manager.authorizationStatus == .authorized || manager.authorizationStatus == .authorizedAlways { scanWiFi() }
+        if manager.authorizationStatus == .authorized { scanWiFi() }
     }
 
     func refreshWiFiState() {

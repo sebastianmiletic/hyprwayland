@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.onWorkspace = { number in model.workspaces.switchTo(number) { model.statusMessage = $0 } }
         manager.register(model.configuration.shortcuts)
         hotkeys = manager
-        cancellable = model.$configuration.map(\.shortcuts).removeDuplicates().sink { [weak manager] in manager?.register($0) }
+        cancellable = model.$configuration.map(\.shortcuts).removeDuplicates().dropFirst().sink { [weak manager] in manager?.register($0) }
         observers.append(NotificationCenter.default.addObserver(forName: .waycodeShowWallpapers, object: nil, queue: .main) { [weak self] _ in self?.showWallpaperGallery() })
         observers.append(NotificationCenter.default.addObserver(forName: .waycodeShowSettings, object: nil, queue: .main) { [weak self] _ in self?.showSettings() })
         observers.append(NotificationCenter.default.addObserver(forName: .waycodeToggleLeftSidebar, object: nil, queue: .main) { [weak self] _ in self?.sidePanelController?.toggleLeft() })

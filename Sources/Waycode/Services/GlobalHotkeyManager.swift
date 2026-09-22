@@ -6,6 +6,11 @@ final class GlobalHotkeyManager {
     private var handler: EventHandlerRef?
     private var registeredShortcuts: [UInt32: ShortcutConfiguration] = [:]
     private var lastInvocation: (UUID, Date)?
+    private var lastWorkspaceInvocation: (Int, Date)?
+    private var polledShortcuts: [ShortcutConfiguration] = []
+    private var keysDown = Set<Int>()
+    private var pollingTimer: DispatchSourceTimer?
+    private var globalMonitor: Any?
     var onShortcut: ((ShortcutConfiguration) -> Void)?
     var onWorkspace: ((Int) -> Void)?
 
@@ -17,7 +22,7 @@ final class GlobalHotkeyManager {
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
             let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userData).takeUnretainedValue()
             if (1001...1009).contains(id.id) {
-                DispatchQueue.main.async { manager.onWorkspace?(Int(id.id - 1000)) }
+                DispatchQueue.main.async { manager.invokeWorkspace(Int(id.id - 1000)) }
                 return noErr
             }
             guard let shortcut = manager.registeredShortcuts[id.id] else { return noErr }
@@ -25,12 +30,22 @@ final class GlobalHotkeyManager {
             return noErr
         }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handler)
         if status != noErr { NSLog("Waycode could not install the global hotkey handler (OSStatus %d)", status) }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + .milliseconds(100), repeating: .milliseconds(30), leeway: .milliseconds(5))
+        timer.setEventHandler { [weak self] in self?.pollKeyboard() }
+        timer.resume(); pollingTimer = timer
+        // Passive fallback for systems where another utility interferes with
+        // Carbon delivery. This does not request or open a permission prompt.
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in self?.handleMonitoredKey(event) }
     }
 
-    deinit { clear(); if let handler { RemoveEventHandler(handler) } }
+    deinit {
+        pollingTimer?.cancel(); if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
+        clear(); if let handler { RemoveEventHandler(handler) }
+    }
 
     func register(_ shortcuts: [ShortcutConfiguration]) {
-        clear()
+        clear(); polledShortcuts = shortcuts
         var combinations = Set<String>()
         // Workspace navigation is intentionally fixed and global, matching the
         // desktop labels in the bar. Carbon hotkeys need no Accessibility or
@@ -55,14 +70,45 @@ final class GlobalHotkeyManager {
             let hotkeyID = UInt32(index + 1)
             let id = EventHotKeyID(signature: Self.signature, id: hotkeyID)
             let status = RegisterEventHotKey(UInt32(code), modifiers, id, GetApplicationEventTarget(), 0, &ref)
-            if status == noErr, let ref { refs.append(ref); registeredShortcuts[hotkeyID] = shortcut }
+            if status == noErr, let ref { refs.append(ref); registeredShortcuts[hotkeyID] = shortcut; NSLog("Waycode registered global shortcut %@ for %@", shortcut.display, shortcut.action.rawValue) }
             else { NSLog("Waycode could not register global shortcut %@ (OSStatus %d)", shortcut.display, status) }
         }
     }
 
+    private func handleMonitoredKey(_ event: NSEvent) {
+        guard !event.isARepeat else { return }
+        let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
+        if flags == [.option], let index = [18, 19, 20, 21, 23, 22, 26, 28, 25].firstIndex(of: Int(event.keyCode)) { invokeWorkspace(index + 1); return }
+        if let shortcut = polledShortcuts.first(where: { shortcut in
+            guard Self.keyCodes[shortcut.key.lowercased()] == Int(event.keyCode) else { return false }
+            var expected: NSEvent.ModifierFlags = []
+            if shortcut.option { expected.insert(.option) }; if shortcut.command { expected.insert(.command) }; if shortcut.control { expected.insert(.control) }; if shortcut.shift { expected.insert(.shift) }
+            return flags == expected
+        }) { invoke(shortcut) }
+    }
+
+    private func pollKeyboard() {
+        let state: CGEventSourceStateID = .combinedSessionState
+        let flags = CGEventSource.flagsState(state)
+        let relevantCodes = Set(polledShortcuts.compactMap { Self.keyCodes[$0.key.lowercased()] } + [18, 19, 20, 21, 23, 22, 26, 28, 25])
+        let downNow = Set(relevantCodes.filter { CGEventSource.keyState(state, key: CGKeyCode($0)) })
+        let newlyDown = downNow.subtracting(keysDown); keysDown = downNow
+        guard !newlyDown.isEmpty else { return }
+        let option = flags.contains(.maskAlternate), command = flags.contains(.maskCommand), control = flags.contains(.maskControl), shift = flags.contains(.maskShift)
+        for code in newlyDown {
+            if option && !command && !control && !shift, let index = [18, 19, 20, 21, 23, 22, 26, 28, 25].firstIndex(of: code) { invokeWorkspace(index + 1); continue }
+            if let shortcut = polledShortcuts.first(where: { Self.keyCodes[$0.key.lowercased()] == code && $0.option == option && $0.command == command && $0.control == control && $0.shift == shift }) { invoke(shortcut) }
+        }
+    }
+
+    private func invokeWorkspace(_ number: Int) {
+        if let lastWorkspaceInvocation, lastWorkspaceInvocation.0 == number, Date().timeIntervalSince(lastWorkspaceInvocation.1) < 0.18 { return }
+        lastWorkspaceInvocation = (number, Date()); onWorkspace?(number)
+    }
+
     private func invoke(_ shortcut: ShortcutConfiguration) {
         if let lastInvocation, lastInvocation.0 == shortcut.id, Date().timeIntervalSince(lastInvocation.1) < 0.18 { return }
-        lastInvocation = (shortcut.id, Date()); onShortcut?(shortcut)
+        lastInvocation = (shortcut.id, Date()); NSLog("Waycode received global shortcut %@", shortcut.display); onShortcut?(shortcut)
     }
 
     private func clear() { refs.forEach { UnregisterEventHotKey($0) }; refs.removeAll(); registeredShortcuts.removeAll() }
