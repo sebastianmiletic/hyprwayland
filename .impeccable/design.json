@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-22T09:30:00Z",
+  "title": "Design System: Waycode",
+  "extensions": {
+    "colorMeta": {
+      "charred-plum": { "role": "neutral", "displayName": "Charred Plum", "canonical": "#141313", "tonalRamp": ["#141313", "#242121", "#3A3636", "#524D4D", "#716B6B", "#948D8D", "#BBB4B4", "#E6E1E1"] },
+      "raised-plum": { "role": "neutral", "displayName": "Raised Plum", "canonical": "#2D2A2F", "tonalRamp": ["#171519", "#2D2A2F", "#454047", "#5E575F", "#79717A", "#978E98", "#B9B0BA", "#E8E1E9"] },
+      "pearl-text": { "role": "neutral", "displayName": "Pearl Text", "canonical": "#E6E1E1", "tonalRamp": ["#292525", "#423D3D", "#5E5757", "#797272", "#968E8E", "#B4ACAC", "#D1CACA", "#E6E1E1"] },
+      "smoke-text": { "role": "neutral", "displayName": "Smoke Text", "canonical": "#948F94", "tonalRamp": ["#242224", "#393639", "#504C50", "#686368", "#817B81", "#948F94", "#BBB6BB", "#E5E1E5"] },
+      "mineral-accent": { "role": "primary", "displayName": "Mineral Accent", "canonical": "#CBC4CB", "tonalRamp": ["#2B272B", "#423D42", "#5C555C", "#766E76", "#928992", "#AEA5AE", "#CBC4CB", "#EEE9EE"] },
+      "sage-success": { "role": "secondary", "displayName": "Sage Success", "canonical": "#B5CCBA", "tonalRamp": ["#203026", "#344A3A", "#4A6651", "#62836A", "#7CA184", "#99BC9F", "#B5CCBA", "#E4EFE6"] }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Page title", "purpose": "Settings page titles only." },
+      "body": { "displayName": "Interface body", "purpose": "Settings, explanations, and native controls." },
+      "label": { "displayName": "Compact label", "purpose": "Bar modules, values, and group labels." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "state-fast", "value": "160ms ease-out", "purpose": "Pressed, hover, and selection feedback only." },
+      { "name": "state-standard", "value": "220ms ease-out", "purpose": "Panel and content state transitions." }
+    ],
+    "breakpoints": [
+      { "name": "compact-bar", "value": "900px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Desktop Bar",
+      "kind": "nav",
+      "refersTo": "desktop-bar",
+      "description": "The persistent native desktop status and workspace surface.",
+      "html": "<nav class=\"ds-bar\"><strong>Waycode</strong><div class=\"ds-workspaces\"><button class=\"ds-active\">1</button><button>2</button><button>3</button></div><span>Wi-Fi&nbsp;&nbsp;82%</span></nav>",
+      "css": ".ds-bar{height:38px;padding:0 12px;border:1px solid rgba(148,143,148,.22);border-radius:17px;background:#141313;color:#e6e1e1;display:flex;align-items:center;justify-content:space-between;font:600 12px -apple-system,sans-serif}.ds-workspaces{display:flex;gap:2px;padding:3px;border-radius:999px;background:#2d2a2f}.ds-workspaces button{width:24px;height:24px;border:0;border-radius:50%;background:transparent;color:#948f94}.ds-workspaces .ds-active{background:#cbc4cb;color:#141313}.ds-workspaces button:focus-visible{outline:2px solid #cbc4cb;outline-offset:2px}"
+    },
+    {
+      "name": "Settings Group",
+      "kind": "card",
+      "refersTo": "settings-group",
+      "description": "A single-level group of related native controls.",
+      "html": "<section class=\"ds-group\"><small>PLACEMENT</small><label><input type=\"checkbox\" checked> Show desktop bar</label></section>",
+      "css": ".ds-group{padding:18px;border:1px solid rgba(148,143,148,.18);border-radius:12px;background:#2d2a2f;color:#e6e1e1;font:400 13px -apple-system,sans-serif}.ds-group small{display:block;margin-bottom:14px;color:#948f94;font-weight:600;letter-spacing:.7px}.ds-group label{display:flex;gap:8px;align-items:center}"
+    },
+    {
+      "name": "Wallpaper Tile",
+      "kind": "button",
+      "description": "A direct-action image preview that applies a desktop wallpaper.",
+      "html": "<button class=\"ds-wallpaper\"><span>Mountain dusk</span></button>",
+      "css": ".ds-wallpaper{width:220px;height:120px;padding:10px;border:1px solid rgba(148,143,148,.2);border-radius:10px;background:linear-gradient(160deg,#2d2a2f,#70636f);color:#e6e1e1;text-align:left;font:600 12px -apple-system,sans-serif;display:flex;align-items:flex-end;transition:transform 160ms ease-out,border-color 160ms ease-out}.ds-wallpaper:hover{transform:scale(1.015);border-color:#cbc4cb}.ds-wallpaper:focus-visible{outline:2px solid #cbc4cb;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Native Rice Workbench",
+    "overview": "Waycode feels like a carefully tuned desktop environment that obeys macOS conventions. The persistent bar is compact and expressive; the editor is calm and familiar.",
+    "keyCharacteristics": ["A dense, rounded bar paired with a quiet native editor.", "Native safe areas and symmetric split surfaces keep widgets clear of the MacBook notch.", "A menu-bar status item and desktop-bar gear keep settings reachable without a Dock icon.", "Four reorderable widget zones provide exact placement.", "Immediate live feedback for every visual change.", "Muted mineral color with rare, meaningful state emphasis.", "Familiar macOS controls and keyboard access."],
+    "rules": [
+      { "name": "The Earned Accent Rule", "body": "Accent marks selection or action. It is never ambient decoration.", "section": "colors" },
+      { "name": "The Native Scale Rule", "body": "Product copy stays within the macOS type scale.", "section": "typography" },
+      { "name": "The Tonal Depth Rule", "body": "Use surface contrast before shadow.", "section": "elevation" }
+    ],
+    "dos": ["Do show the real desktop bar while its controls are being edited.", "Do preserve native keyboard navigation and VoiceOver labels."],
+    "donts": ["Don't make this look like a SaaS dashboard.", "Don't use decorative glassmorphism, excessive neon, terminal cosplay, or nested cards.", "Don't add controls that only preview an effect and do not affect the real desktop."]
+  }
+}
