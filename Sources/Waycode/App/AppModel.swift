@@ -128,6 +128,23 @@ final class AppModel: ObservableObject {
             }
             configuration.sourcePresetVersion = 10
         }
+        if configuration.sourcePresetVersion < 11 {
+            if !configuration.bar.showBackground, configuration.bar.widgets.first(where: { $0.kind == .rightSidebar })?.style == .pill {
+                for index in configuration.bar.widgets.indices where [.wifi, .volume, .battery, .rightSidebar, .settings].contains(configuration.bar.widgets[index].kind) {
+                    configuration.bar.widgets[index].enabled = true; configuration.bar.widgets[index].style = .pill
+                    configuration.bar.widgets[index].horizontalPadding = [.wifi, .settings].contains(configuration.bar.widgets[index].kind) ? 7 : 9
+                }
+            }
+            configuration.sourcePresetVersion = 11
+        }
+        // These three entry points are guaranteed global defaults. Repair stale
+        // modifier values left by earlier builds before Carbon registration.
+        let globalDefaults: [(ShortcutAction, String)] = [(.wallpaper, "w"), (.leftSidebar, "a"), (.rightSidebar, "n")]
+        for (action, key) in globalDefaults {
+            if let index = configuration.shortcuts.firstIndex(where: { $0.action == action }) {
+                configuration.shortcuts[index].key = key; configuration.shortcuts[index].option = true; configuration.shortcuts[index].command = false; configuration.shortcuts[index].control = false; configuration.shortcuts[index].shift = false
+            } else { configuration.shortcuts.append(ShortcutConfiguration(action: action, key: key)) }
+        }
         if !configuration.bar.widgets.contains(where: { $0.kind == .settings || $0.clickAction == .settings }) {
             configuration.bar.widgets.append(WidgetConfiguration(kind: .settings, name: "Waycode settings", placement: .trailing, icon: "gearshape.fill", showLabel: false, clickAction: .settings))
         }

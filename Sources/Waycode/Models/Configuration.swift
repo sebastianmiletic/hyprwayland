@@ -236,9 +236,9 @@ extension BarConfiguration {
         case .pillOnly:
             height = 40; horizontalInset = 14; outerInset = 6; floating = true; splitAroundNotch = true; showBackground = false; blurEnabled = false; itemSpacing = 7
             for index in widgets.indices {
-                widgets[index].style = widgets[index].kind == .settings ? .plain : .pill
-                widgets[index].horizontalPadding = widgets[index].kind == .settings ? 4 : 9; widgets[index].cornerRadius = 12
-                if [.wifi, .volume, .battery].contains(widgets[index].kind) { widgets[index].enabled = false }
+                widgets[index].style = .pill
+                widgets[index].horizontalPadding = [.wifi, .settings].contains(widgets[index].kind) ? 7 : 9; widgets[index].cornerRadius = 12
+                if [.wifi, .volume, .battery].contains(widgets[index].kind) { widgets[index].enabled = true }
                 if widgets[index].kind == .rightSidebar { widgets[index].enabled = true; widgets[index].icon = "slider.horizontal.3"; widgets[index].showIcon = true; widgets[index].showLabel = false }
                 if widgets[index].kind == .settings { widgets[index].enabled = true }
             }
@@ -289,7 +289,7 @@ struct WaycodeConfiguration: Codable, Equatable {
     var todos: [String] = []
     var tiling = TilingConfiguration()
     var savedBars: [NamedBarProfile] = []
-    var sourcePresetVersion = 10
+    var sourcePresetVersion = 11
     var launchAtLogin = false
 
     enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, tiling, savedBars, sourcePresetVersion, launchAtLogin }

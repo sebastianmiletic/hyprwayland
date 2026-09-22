@@ -5,25 +5,35 @@ final class GlobalHotkeyManager {
     private var refs: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
     private var registeredShortcuts: [UInt32: ShortcutConfiguration] = [:]
+    private var monitoredShortcuts: [ShortcutConfiguration] = []
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
+    private var lastInvocation: (UUID, Date)?
     var onShortcut: ((ShortcutConfiguration) -> Void)?
 
     init() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, event, userData in
+        let status = InstallEventHandler(GetApplicationEventTarget(), { _, event, userData in
             guard let event, let userData else { return noErr }
             var id = EventHotKeyID()
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
             let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userData).takeUnretainedValue()
             guard let shortcut = manager.registeredShortcuts[id.id] else { return noErr }
-            DispatchQueue.main.async { manager.onShortcut?(shortcut) }
+            DispatchQueue.main.async { manager.invoke(shortcut) }
             return noErr
         }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handler)
+        if status != noErr { NSLog("Waycode could not install the global hotkey handler (OSStatus %d)", status) }
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] in self?.handleMonitoredKey($0) }
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in self?.handleMonitoredKey(event); return event }
     }
 
-    deinit { clear(); if let handler { RemoveEventHandler(handler) } }
+    deinit {
+        clear(); if let handler { RemoveEventHandler(handler) }
+        if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }; if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+    }
 
     func register(_ shortcuts: [ShortcutConfiguration]) {
-        clear()
+        clear(); monitoredShortcuts = shortcuts
         var combinations = Set<String>()
         for (index, shortcut) in shortcuts.enumerated() {
             guard shortcut.option || shortcut.command || shortcut.control || shortcut.shift,
@@ -38,8 +48,27 @@ final class GlobalHotkeyManager {
             var ref: EventHotKeyRef?
             let hotkeyID = UInt32(index + 1)
             let id = EventHotKeyID(signature: Self.signature, id: hotkeyID)
-            if RegisterEventHotKey(UInt32(code), modifiers, id, GetApplicationEventTarget(), 0, &ref) == noErr, let ref { refs.append(ref); registeredShortcuts[hotkeyID] = shortcut }
+            let status = RegisterEventHotKey(UInt32(code), modifiers, id, GetApplicationEventTarget(), 0, &ref)
+            if status == noErr, let ref { refs.append(ref); registeredShortcuts[hotkeyID] = shortcut }
+            else { NSLog("Waycode could not register global shortcut %@ (OSStatus %d)", shortcut.display, status) }
         }
+    }
+
+    private func handleMonitoredKey(_ event: NSEvent) {
+        guard !event.isARepeat else { return }
+        let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
+        guard let shortcut = monitoredShortcuts.first(where: { shortcut in
+            guard Self.keyCodes[shortcut.key.lowercased()] == Int(event.keyCode) else { return false }
+            var expected: NSEvent.ModifierFlags = []
+            if shortcut.option { expected.insert(.option) }; if shortcut.command { expected.insert(.command) }; if shortcut.control { expected.insert(.control) }; if shortcut.shift { expected.insert(.shift) }
+            return flags == expected
+        }) else { return }
+        DispatchQueue.main.async { [weak self] in self?.invoke(shortcut) }
+    }
+
+    private func invoke(_ shortcut: ShortcutConfiguration) {
+        if let lastInvocation, lastInvocation.0 == shortcut.id, Date().timeIntervalSince(lastInvocation.1) < 0.18 { return }
+        lastInvocation = (shortcut.id, Date()); onShortcut?(shortcut)
     }
 
     private func clear() { refs.forEach { UnregisterEventHotKey($0) }; refs.removeAll(); registeredShortcuts.removeAll() }
