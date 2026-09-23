@@ -66,7 +66,8 @@ final class SidePanelController {
         let margin: CGFloat = 7
         let bar = model.configuration.bar
         let shelf = bar.notchMaskEnabled ? (bar.notchMaskHeight > 0 ? bar.notchMaskHeight : Double(screen.safeAreaInsets.top)) : 0
-        let barClearance = bar.enabled && bar.position == .top ? CGFloat(bar.height + bar.outerInset * 2 + shelf) + 6 : 18
+        let barInsets = bar.presentation == .top ? 0 : bar.outerInset * 2
+        let barClearance = bar.enabled ? CGFloat(bar.height + barInsets + shelf) + 6 : 18
         let top = min(screenFrame.maxY - 10, screen.frame.maxY - barClearance)
         let width: CGFloat = 420
         let x = side == .left ? screenFrame.minX + margin : screenFrame.maxX - width - margin

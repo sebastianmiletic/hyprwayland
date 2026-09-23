@@ -32,9 +32,10 @@ struct BarView: View {
     var body: some View {
         GeometryReader { proxy in
             let contentInset: Double = 12
-            let outerX = config.connectedPanel ? 0 : (config.floating ? config.horizontalInset : 0)
+            let outerX = config.presentation == .floating ? config.horizontalInset : 0
+            let verticalInset = config.presentation == .top ? 0 : config.outerInset
             let barWidth = max(0, proxy.size.width - outerX * 2)
-            let barHeight = max(0, proxy.size.height - topReservedHeight - config.outerInset * 2)
+            let barHeight = max(0, proxy.size.height - topReservedHeight - verticalInset * 2)
             let sideWidth = max(0, (barWidth - contentInset * 2 - effectiveNotchWidth) / 2)
             ZStack(alignment: .top) {
                 if topReservedHeight > 0 {
@@ -60,7 +61,7 @@ struct BarView: View {
                     .padding(.horizontal, contentInset)
                 }
                 .frame(width: barWidth, height: barHeight)
-                .position(x: proxy.size.width / 2, y: topReservedHeight + barHeight / 2 + config.outerInset)
+                .position(x: proxy.size.width / 2, y: topReservedHeight + barHeight / 2 + verticalInset)
             }
         }
         .font(.system(size: 12.5, weight: .medium, design: .rounded))
@@ -68,7 +69,7 @@ struct BarView: View {
     }
 
     private var effectiveNotchWidth: Double { notchWidth > 0 ? notchWidth + 16 : 8 }
-    private var barShape: RoundedRectangle { RoundedRectangle(cornerRadius: config.connectedPanel ? 0 : (config.floating ? config.cornerRadius : 0), style: .continuous) }
+    private var barShape: RoundedRectangle { RoundedRectangle(cornerRadius: config.presentation == .floating ? config.cornerRadius : 0, style: .continuous) }
     @ViewBuilder private var barSurface: some View {
         if config.blurEnabled {
             ZStack {
@@ -77,17 +78,17 @@ struct BarView: View {
                 } else { Color(hex: palette.background) }
                 Color(hex: palette.background).opacity(config.opacity)
             }.clipShape(barShape)
-                .overlay(barShape.stroke(Color(hex: palette.muted).opacity(0.3), lineWidth: config.floating ? 1 : 0))
+                .overlay(barShape.stroke(Color(hex: palette.muted).opacity(0.3), lineWidth: config.presentation == .floating ? 1 : 0))
         } else {
             barShape.fill(Color(hex: palette.background).opacity(config.opacity))
-                .overlay(barShape.stroke(Color(hex: palette.muted).opacity(0.22), lineWidth: config.floating ? 1 : 0))
+                .overlay(barShape.stroke(Color(hex: palette.muted).opacity(0.22), lineWidth: config.presentation == .floating ? 1 : 0))
         }
     }
     private var blurRadius: CGFloat { switch config.blurStyle { case .thin: 8; case .regular: 16; case .thick: 28 } }
     @ViewBuilder private var barBackground: some View {
-        if !config.showBackground && !config.connectedPanel {
+        if !config.showBackground {
             Color.clear
-        } else if config.splitAroundNotch && !config.connectedPanel && notchWidth > 0 {
+        } else if config.splitAroundNotch && notchWidth > 0 {
             HStack(spacing: effectiveNotchWidth) { barSurface; barSurface }
         } else { barSurface }
     }
@@ -629,7 +630,7 @@ struct BarPreview: View {
                 BarView(model: model, notchWidth: (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled ? min(180, proxy.size.width * 0.18) : 0, topReservedHeight: model.configuration.bar.notchMaskEnabled ? 32 : 0)
             }
         }
-        .frame(height: max(86, model.configuration.bar.height + model.configuration.bar.outerInset * 2 + 28 + (model.configuration.bar.notchMaskEnabled ? 32 : 0)))
+        .frame(height: max(86, model.configuration.bar.height + (model.configuration.bar.presentation == .top ? 0 : model.configuration.bar.outerInset * 2) + 28 + (model.configuration.bar.notchMaskEnabled ? 32 : 0)))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(.primary.opacity(0.1)))
     }

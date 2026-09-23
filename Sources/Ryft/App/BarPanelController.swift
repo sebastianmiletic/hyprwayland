@@ -131,20 +131,20 @@ final class BarPanelController {
     }
 
     private func panelFrame(on screen: NSScreen, config: BarConfiguration) -> NSRect {
-        let totalHeight = config.height + config.outerInset * 2 + topReservedHeight(for: screen, config: config)
-        let y = config.position == .top ? screen.frame.maxY - totalHeight : screen.frame.minY
-        return NSRect(x: screen.frame.minX, y: y, width: screen.frame.width, height: totalHeight)
+        let verticalInsets = config.presentation == .top ? 0 : config.outerInset * 2
+        let totalHeight = config.height + verticalInsets + topReservedHeight(for: screen, config: config)
+        return NSRect(x: screen.frame.minX, y: screen.frame.maxY - totalHeight, width: screen.frame.width, height: totalHeight)
     }
 
     private func notchWidth(for screen: NSScreen, config: BarConfiguration) -> Double {
         guard (config.reserveNotchSpace || config.splitAroundNotch), !config.notchMaskEnabled else { return 0 }
         if config.manualNotchWidth > 0 { return config.manualNotchWidth }
-        guard config.position == .top, let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return 0 }
+        guard let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return 0 }
         return max(0, right.minX - left.maxX)
     }
 
     private func topReservedHeight(for screen: NSScreen, config: BarConfiguration) -> Double {
-        guard config.notchMaskEnabled, config.position == .top else { return 0 }
+        guard config.notchMaskEnabled else { return 0 }
         if config.notchMaskHeight > 0 { return config.notchMaskHeight }
         guard screen.auxiliaryTopLeftArea != nil || screen.auxiliaryTopRightArea != nil else { return 0 }
         return max(screen.safeAreaInsets.top, 32)
@@ -182,9 +182,7 @@ final class BarPanelController {
         @ObservedObject var context: PanelContext
         var body: some View {
             ZStack {
-                if model.configuration.bar.position == .top {
-                    WallpaperMenuBarCover(path: context.wallpaperPath, screenSize: context.screenSize)
-                }
+                WallpaperMenuBarCover(path: context.wallpaperPath, screenSize: context.screenSize)
                 BarView(model: model, notchWidth: context.notchWidth, topReservedHeight: context.topReservedHeight, interactionID: context.interactionID)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }

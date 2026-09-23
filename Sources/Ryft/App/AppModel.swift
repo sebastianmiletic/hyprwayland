@@ -37,6 +37,7 @@ final class AppModel: ObservableObject {
     let controls = SystemControlService()
     lazy var notifications = NotificationDaemon(controls: controls)
     let workspaces = WorkspaceService()
+    let tiling = OmniWMService()
     let gemini = GeminiService()
     private let wallpaperTransition = WallpaperTransitionController()
 
@@ -187,6 +188,9 @@ final class AppModel: ObservableObject {
         workspaces.experimentalTransitionsEnabled = configuration.experimentalWorkspaceTransitions
         $configuration.map(\.experimentalWorkspaceTransitions).removeDuplicates().dropFirst()
             .sink { [weak self] in self?.workspaces.experimentalTransitionsEnabled = $0 }.store(in: &cancellables)
+        if configuration.omniWMTiling.enabled { tiling.setEnabled(true) }
+        $configuration.map(\.omniWMTiling.enabled).removeDuplicates().dropFirst()
+            .sink { [weak self] in self?.tiling.setEnabled($0) }.store(in: &cancellables)
         if !configuration.hasCompletedOnboarding { selectedSection = .permissions }
         refreshWallpapers()
         save()
@@ -215,9 +219,11 @@ final class AppModel: ObservableObject {
         var bar = configuration.bar
         let widgetsAvoidNotch = bar.reserveNotchSpace
         let barAvoidsNotch = bar.splitAroundNotch
+        let presentation = bar.presentation
         bar.apply(style)
         bar.reserveNotchSpace = widgetsAvoidNotch
         bar.splitAroundNotch = barAvoidsNotch
+        bar.presentation = presentation
         return bar
     }
     func applyBarStyle(_ style: BuiltInBarStyle) {
@@ -228,9 +234,21 @@ final class AppModel: ObservableObject {
     func saveBarProfile() {
         let name = barProfileName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
-        configuration.savedBars.append(NamedBarProfile(name: name, bar: configuration.bar)); statusMessage = "Saved bar profile"
+        let snapshot = NamedBarProfile(name: name, bar: configuration.bar)
+        if let index = configuration.savedBars.firstIndex(where: { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
+            configuration.savedBars[index] = snapshot
+            statusMessage = "Updated \(name)"
+        } else {
+            configuration.savedBars.append(snapshot)
+            statusMessage = "Saved \(name)"
+        }
+        save()
     }
-    func applyBarProfile(_ profile: NamedBarProfile) { configuration.bar = profile.bar; statusMessage = "Loaded \(profile.name)" }
+    func applyBarProfile(_ profile: NamedBarProfile) {
+        configuration.bar = profile.bar
+        statusMessage = "Loaded \(profile.name)"
+        save()
+    }
 
     func exportProfile() {
         let panel = NSSavePanel()
@@ -414,13 +432,13 @@ final class AppModel: ObservableObject {
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case home = "Overview", permissions = "Permissions", guide = "Quick Start", bar = "Bar", themes = "Themes", modules = "Widgets", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
+    case home = "Overview", permissions = "Permissions", guide = "Quick Start", bar = "Bar", themes = "Themes", modules = "Widgets", tiling = "Tiling", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .home: "house.fill"; case .permissions: "hand.raised.fill"; case .guide: "lightbulb.fill"
         case .bar: "menubar.rectangle"; case .themes: "paintpalette"; case .modules: "square.grid.2x2"
-        case .shortcuts: "command"; case .wallpapers: "photo.on.rectangle.angled"; case .general: "gearshape"
+        case .tiling: "rectangle.split.2x2"; case .shortcuts: "command"; case .wallpapers: "photo.on.rectangle.angled"; case .general: "gearshape"
         }
     }
 }

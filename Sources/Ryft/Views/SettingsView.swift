@@ -76,6 +76,7 @@ struct SettingsView: View {
         case .bar: BarSettingsView(model: model)
         case .themes: ThemeSettingsView(model: model)
         case .modules: ModuleSettingsView(model: model)
+        case .tiling: TilingSettingsView(model: model)
         case .shortcuts: ShortcutSettingsView(model: model)
         case .wallpapers: WallpaperGalleryView(model: model, standalone: false)
         case .general: GeneralSettingsView(model: model)
@@ -99,6 +100,7 @@ private struct PageHeader: View {
         case .bar: "Shape the live desktop bar. Changes appear immediately."
         case .themes: "Choose a preset or tune every color."
         case .modules: "Decide what earns space in the bar."
+        case .tiling: "Automatically arrange new windows with a Hyprland-style Dwindle layout."
         case .shortcuts: "Map global controls that work from any app."
         case .wallpapers: "Pick an image for every connected display."
         case .general: "Profiles, permissions, and startup behavior."
@@ -116,6 +118,52 @@ struct SettingsGroup<Content: View>: View {
             content
         }.padding(16).background(Color.primary.opacity(0.035)).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(.primary.opacity(0.075)))
+    }
+}
+
+struct TilingSettingsView: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject private var engine: OmniWMService
+
+    init(model: AppModel) {
+        self.model = model
+        engine = model.tiling
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsGroup("Automatic Dwindle tiling") {
+                Toggle("Tile newly opened windows automatically", isOn: $model.configuration.omniWMTiling.enabled)
+                    .toggleStyle(.switch)
+                HStack(spacing: 8) {
+                    Circle().fill(engine.running && model.configuration.omniWMTiling.enabled ? Color.green : Color.secondary.opacity(0.45)).frame(width: 8, height: 8)
+                    Text(engine.status).font(.callout).foregroundStyle(.secondary)
+                    Spacer()
+                }
+                Text("Ryft uses OmniWM’s complete Dwindle engine: new windows split the available area, resize, and move into place automatically. OmniWM runs as its independently signed window-management engine and requires its own Accessibility and Input Monitoring approval.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    if !engine.installed {
+                        Button(engine.installing ? "Installing…" : "Install OmniWM 0.7.1") {
+                            engine.installAndEnable()
+                            model.configuration.omniWMTiling.enabled = true
+                        }.buttonStyle(SettingsHoverButtonStyle()).disabled(engine.installing)
+                    } else {
+                        Button("Open OmniWM") { engine.openOmniWM() }.buttonStyle(SettingsHoverButtonStyle())
+                    }
+                    Button("Source & documentation") { engine.openSource() }.buttonStyle(SettingsHoverButtonStyle())
+                    Spacer()
+                }
+            }
+            SettingsGroup("How it works") {
+                Label("Dwindle is selected as OmniWM’s default and current workspace layout.", systemImage: "rectangle.split.2x2")
+                Label("Window observation and placement continue while Ryft Settings is closed.", systemImage: "sparkles.rectangle.stack")
+                Label("OmniWM hotkeys stay off so Ryft’s Option+1–9 desktop controls remain authoritative.", systemImage: "keyboard")
+                Label("Turn the switch off to stop automatic rearrangement; existing window frames remain where they are.", systemImage: "power")
+                Text("OmniWM is GPL-2.0 software by the OmniWM contributors. Ryft downloads the official notarized release from GitHub and does not copy its engine into your configuration or saved bars.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -166,13 +214,14 @@ private struct CurrentBarInspector: View {
         return bar.manualNotchWidth > 0 ? CGFloat(bar.manualNotchWidth) : max(0, right.minX - left.maxX)
     }
     private var shelfHeight: CGFloat { bar.notchMaskEnabled ? (bar.notchMaskHeight > 0 ? CGFloat(bar.notchMaskHeight) : max(NSScreen.main?.safeAreaInsets.top ?? 0, 32)) : 0 }
+    private var barInsets: CGFloat { bar.presentation == .top ? 0 : bar.outerInset * 2 }
     var body: some View {
         ScrollView(.horizontal, showsIndicators: true) {
             BarView(model: model, notchWidth: notchWidth, topReservedHeight: shelfHeight)
-                .frame(width: screenWidth, height: bar.height + bar.outerInset * 2 + shelfHeight)
+                .frame(width: screenWidth, height: bar.height + barInsets + shelfHeight)
                 .allowsHitTesting(false)
         }
-        .frame(height: bar.height + bar.outerInset * 2 + shelfHeight + 12)
+        .frame(height: bar.height + barInsets + shelfHeight + 12)
         .background(Color(hex: "#202124"))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.1)))
@@ -192,7 +241,7 @@ private struct BarStylePreview: View {
                     ZStack {
                         LinearGradient(colors: [Color(hex: preview.palette.muted).opacity(0.3), Color(hex: preview.palette.background).opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing)
                         BarView(model: model, notchWidth: (preview.reserveNotchSpace || preview.splitAroundNotch) ? 160 : 0, topReservedHeight: 0, configurationOverride: preview)
-                            .frame(width: sourceWidth, height: preview.height + preview.outerInset * 2)
+                            .frame(width: sourceWidth, height: preview.height + (preview.presentation == .top ? 0 : preview.outerInset * 2))
                             .scaleEffect(scale, anchor: .center)
                             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
                             .allowsHitTesting(false)
@@ -212,6 +261,13 @@ private struct BarStylePreview: View {
 
 struct BarSettingsView: View {
     @ObservedObject var model: AppModel
+    private var placementDescription: String {
+        switch model.configuration.bar.presentation {
+        case .floating: return "Floating leaves space above and beside the bar."
+        case .edges: return "Touching edges reaches both sides while keeping space above."
+        case .top: return "Top and edges connects the bar to the complete upper edge."
+        }
+    }
     var body: some View {
         SettingsGroup("Current bar · live at actual height") {
             CurrentBarInspector(model: model)
@@ -238,14 +294,12 @@ struct BarSettingsView: View {
         HStack(alignment: .top, spacing: 16) {
             SettingsGroup("Placement") {
                 Toggle("Show desktop bar", isOn: $model.configuration.bar.enabled)
-                Picker("Position", selection: $model.configuration.bar.position) { ForEach(BarPosition.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
-                Toggle("Floating bar", isOn: $model.configuration.bar.floating).disabled(model.configuration.bar.connectedPanel)
-                Toggle("Connected edge-to-edge panel", isOn: $model.configuration.bar.connectedPanel)
-                Text("Connected mode is a layout setting, not a style. It joins the bar into one square-edged surface while preserving the selected palette and widgets.").font(.caption).foregroundStyle(.secondary)
+                Picker("Bar placement", selection: $model.configuration.bar.presentation) { ForEach(BarPresentation.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
+                Text(placementDescription).font(.caption).foregroundStyle(.secondary)
                 Toggle("Show on every display", isOn: $model.configuration.bar.showOnAllDisplays)
                 Toggle("Black notch shelf", isOn: Binding(get: { model.configuration.bar.notchMaskEnabled }, set: { enabled in
                     model.configuration.bar.notchMaskEnabled = enabled
-                    if enabled { model.configuration.bar.position = .top; model.configuration.bar.reserveNotchSpace = false }
+                    if enabled { model.configuration.bar.presentation = .top; model.configuration.bar.reserveNotchSpace = false }
                 }))
                 if model.configuration.bar.notchMaskEnabled {
                     ValueSlider("Shelf height override", value: $model.configuration.bar.notchMaskHeight, range: 0...60, suffix: "pt")

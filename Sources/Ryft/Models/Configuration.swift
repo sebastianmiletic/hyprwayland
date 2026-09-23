@@ -18,7 +18,10 @@ struct ThemePalette: Codable, Equatable, Identifiable {
     static let trueBlack = ThemePalette(id: "true-black", name: "True Black", source: "Ryft", background: "#000000", surface: "#151515", foreground: "#F2F2F2", muted: "#A0A0A0", accent: "#D0D0D0", success: "#8CCF9B")
 }
 
-enum BarPosition: String, Codable, CaseIterable { case top = "Top", bottom = "Bottom" }
+enum BarPresentation: String, Codable, CaseIterable, Identifiable {
+    case floating = "Floating", edges = "Touching edges", top = "Top and edges"
+    var id: String { rawValue }
+}
 enum BarBlurStyle: String, Codable, CaseIterable, Identifiable { case thin = "Thin", regular = "Regular", thick = "Thick"; var id: String { rawValue } }
 enum BuiltInBarStyle: String, CaseIterable, Identifiable {
     case sebastianExact = "Sebastian II · 1:1"
@@ -34,6 +37,10 @@ enum BuiltInBarStyle: String, CaseIterable, Identifiable {
         case .pillOnly: "No bar surface, only modules"; case .monochrome: "Pure neutral utility"; case .rose: "Muted rose and sage"; case .solarized: "Classic precision colors"; case .outline: "Transparent outlined modules"
         }
     }
+}
+
+struct OmniWMTilingConfiguration: Codable, Equatable {
+    var enabled = false
 }
 
 struct NamedBarProfile: Codable, Equatable, Identifiable {
@@ -138,9 +145,7 @@ struct BarConfiguration: Codable, Equatable {
     var blurStyle: BarBlurStyle = .regular
     var panelBlurEnabled = true
     var panelOpacity: Double = 0.88
-    var position: BarPosition = .top
-    var floating = true
-    var connectedPanel = false
+    var presentation: BarPresentation = .floating
     var showOnAllDisplays = true
     var reserveNotchSpace = true
     var splitAroundNotch = true
@@ -155,7 +160,8 @@ struct BarConfiguration: Codable, Equatable {
     var palette: ThemePalette = .sebastian
     var widgets: [WidgetConfiguration] = WidgetConfiguration.defaults
 
-    enum CodingKeys: String, CodingKey { case enabled, height, horizontalInset, outerInset, itemSpacing, cornerRadius, opacity, showBackground, sourceExact, blurEnabled, blurStyle, panelBlurEnabled, panelOpacity, position, floating, connectedPanel, showOnAllDisplays, reserveNotchSpace, splitAroundNotch, notchMaskEnabled, notchMaskHeight, notchShelfCornerRadius, roundBottomDisplayCorners, displayCornerRadius, manualNotchWidth, workspaceCount, showWorkspaceAppIcons, palette, widgets }
+    enum CodingKeys: String, CodingKey { case enabled, height, horizontalInset, outerInset, itemSpacing, cornerRadius, opacity, showBackground, sourceExact, blurEnabled, blurStyle, panelBlurEnabled, panelOpacity, presentation, showOnAllDisplays, reserveNotchSpace, splitAroundNotch, notchMaskEnabled, notchMaskHeight, notchShelfCornerRadius, roundBottomDisplayCorners, displayCornerRadius, manualNotchWidth, workspaceCount, showWorkspaceAppIcons, palette, widgets }
+    enum LegacyCodingKeys: String, CodingKey { case floating, connectedPanel }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -172,9 +178,11 @@ struct BarConfiguration: Codable, Equatable {
         blurStyle = try c.decodeIfPresent(BarBlurStyle.self, forKey: .blurStyle) ?? .regular
         panelBlurEnabled = try c.decodeIfPresent(Bool.self, forKey: .panelBlurEnabled) ?? true
         panelOpacity = try c.decodeIfPresent(Double.self, forKey: .panelOpacity) ?? 0.88
-        position = try c.decodeIfPresent(BarPosition.self, forKey: .position) ?? .top
-        floating = try c.decodeIfPresent(Bool.self, forKey: .floating) ?? true
-        connectedPanel = try c.decodeIfPresent(Bool.self, forKey: .connectedPanel) ?? false
+        let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+        if let decoded = try c.decodeIfPresent(BarPresentation.self, forKey: .presentation) { presentation = decoded }
+        else if try legacy.decodeIfPresent(Bool.self, forKey: .connectedPanel) == true { presentation = .top }
+        else if try legacy.decodeIfPresent(Bool.self, forKey: .floating) == false { presentation = .edges }
+        else { presentation = .floating }
         showOnAllDisplays = try c.decodeIfPresent(Bool.self, forKey: .showOnAllDisplays) ?? true
         reserveNotchSpace = try c.decodeIfPresent(Bool.self, forKey: .reserveNotchSpace) ?? true
         splitAroundNotch = try c.decodeIfPresent(Bool.self, forKey: .splitAroundNotch) ?? true
@@ -195,14 +203,14 @@ extension BarConfiguration {
     mutating func apply(_ style: BuiltInBarStyle) {
         showBackground = true
         sourceExact = false
-        connectedPanel = false
+        presentation = .floating
         for index in widgets.indices { widgets[index].enabled = true }
         switch style {
         case .sebastian:
-            height = 42; horizontalInset = 12; outerInset = 5; cornerRadius = 18; floating = true; splitAroundNotch = true; blurEnabled = false; opacity = 0.72
+            height = 42; horizontalInset = 12; outerInset = 5; cornerRadius = 18; presentation = .floating; splitAroundNotch = true; blurEnabled = false; opacity = 0.72
             for index in widgets.indices { widgets[index].style = [.uptime, .workspaces, .rightSidebar].contains(widgets[index].kind) ? .pill : .plain }
         case .sebastianExact:
-            sourceExact = true; height = 42; horizontalInset = 5; outerInset = 5; itemSpacing = 4; cornerRadius = 18; floating = true; reserveNotchSpace = false; splitAroundNotch = false; showBackground = true; blurEnabled = false; opacity = 1
+            sourceExact = true; height = 42; horizontalInset = 5; outerInset = 5; itemSpacing = 4; cornerRadius = 18; presentation = .floating; reserveNotchSpace = false; splitAroundNotch = false; showBackground = true; blurEnabled = false; opacity = 1
             palette = .sebastian; widgets = WidgetConfiguration.defaults
             for index in widgets.indices {
                 widgets[index].fontSize = 13; widgets[index].cornerRadius = 17
@@ -210,24 +218,24 @@ extension BarConfiguration {
                 if [.wifi, .volume, .battery, .settings].contains(widgets[index].kind) { widgets[index].enabled = false }
             }
         case .islands:
-            height = 44; horizontalInset = 16; outerInset = 7; cornerRadius = 18; floating = true; splitAroundNotch = true; showBackground = false; blurEnabled = false; opacity = 1
+            height = 44; horizontalInset = 16; outerInset = 7; cornerRadius = 18; presentation = .floating; splitAroundNotch = true; showBackground = false; blurEnabled = false; opacity = 1
             for index in widgets.indices { widgets[index].style = .pill; widgets[index].horizontalPadding = 10 }
         case .minimal:
-            height = 34; horizontalInset = 18; outerInset = 4; cornerRadius = 8; floating = true; splitAroundNotch = true; blurEnabled = false; opacity = 0.42
+            height = 34; horizontalInset = 18; outerInset = 4; cornerRadius = 8; presentation = .floating; splitAroundNotch = true; blurEnabled = false; opacity = 0.42
             for index in widgets.indices { widgets[index].style = .plain; widgets[index].fontSize = 11 }
         case .compact:
-            height = 34; horizontalInset = 20; outerInset = 4; cornerRadius = 12; floating = true; splitAroundNotch = true; blurEnabled = false; opacity = 0.78; itemSpacing = 2
+            height = 34; horizontalInset = 20; outerInset = 4; cornerRadius = 12; presentation = .floating; splitAroundNotch = true; blurEnabled = false; opacity = 0.78; itemSpacing = 2
             for index in widgets.indices { widgets[index].fontSize = 10.5; widgets[index].horizontalPadding = 5; widgets[index].cornerRadius = 9 }
         case .catppuccin:
-            height = 42; horizontalInset = 14; outerInset = 6; cornerRadius = 18; floating = true; splitAroundNotch = true; blurEnabled = false; opacity = 0.88
+            height = 42; horizontalInset = 14; outerInset = 6; cornerRadius = 18; presentation = .floating; splitAroundNotch = true; blurEnabled = false; opacity = 0.88
             palette = ThemePalette(id: "catppuccin", name: "Catppuccin Mocha", source: "Ryft", background: "#1E1E2E", surface: "#313244", foreground: "#CDD6F4", muted: "#A6ADC8", accent: "#CBA6F7", success: "#A6E3A1")
             for index in widgets.indices { widgets[index].style = [.uptime, .workspaces, .rightSidebar].contains(widgets[index].kind) ? .pill : .plain }
         case .nord:
-            height = 40; horizontalInset = 16; outerInset = 6; cornerRadius = 14; floating = true; splitAroundNotch = true; showBackground = false; blurEnabled = false; opacity = 1
+            height = 40; horizontalInset = 16; outerInset = 6; cornerRadius = 14; presentation = .floating; splitAroundNotch = true; showBackground = false; blurEnabled = false; opacity = 1
             palette = ThemePalette(id: "nord", name: "Nord", source: "Ryft", background: "#2E3440", surface: "#3B4252", foreground: "#ECEFF4", muted: "#D8DEE9", accent: "#88C0D0", success: "#A3BE8C")
             for index in widgets.indices { widgets[index].style = .outlined }
         case .pillOnly:
-            height = 40; horizontalInset = 14; outerInset = 6; floating = true; splitAroundNotch = true; showBackground = false; blurEnabled = false; itemSpacing = 7
+            height = 40; horizontalInset = 14; outerInset = 6; presentation = .floating; splitAroundNotch = true; showBackground = false; blurEnabled = false; itemSpacing = 7
             for index in widgets.indices {
                 widgets[index].style = .pill
                 widgets[index].horizontalPadding = [.wifi, .settings].contains(widgets[index].kind) ? 7 : 9; widgets[index].cornerRadius = 12
@@ -248,7 +256,7 @@ extension BarConfiguration {
             palette = ThemePalette(id: "solarized", name: "Solarized Dark", source: "Ryft", background: "#002B36", surface: "#073642", foreground: "#EEE8D5", muted: "#93A1A1", accent: "#2AA198", success: "#859900")
             for index in widgets.indices { widgets[index].style = .pill }
         case .outline:
-            height = 40; horizontalInset = 16; outerInset = 6; floating = true; splitAroundNotch = true; showBackground = false; blurEnabled = false; itemSpacing = 6
+            height = 40; horizontalInset = 16; outerInset = 6; presentation = .floating; splitAroundNotch = true; showBackground = false; blurEnabled = false; itemSpacing = 6
             for index in widgets.indices { widgets[index].style = .outlined; widgets[index].horizontalPadding = 8; widgets[index].cornerRadius = 10 }
         }
     }
@@ -284,10 +292,11 @@ struct RyftConfiguration: Codable, Equatable {
     var sourcePresetVersion = 13
     var launchAtLogin = false
     var hasCompletedOnboarding = false
+    var omniWMTiling = OmniWMTilingConfiguration()
     var useHyprlandCursor = false
     var experimentalWorkspaceTransitions = true
 
-    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin, hasCompletedOnboarding, useHyprlandCursor, experimentalWorkspaceTransitions }
+    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin, hasCompletedOnboarding, omniWMTiling, useHyprlandCursor, experimentalWorkspaceTransitions }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -305,6 +314,7 @@ struct RyftConfiguration: Codable, Equatable {
         // Existing installations have already reached the product. Only a
         // genuinely new configuration enters first-run onboarding.
         hasCompletedOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding) ?? true
+        omniWMTiling = try c.decodeIfPresent(OmniWMTilingConfiguration.self, forKey: .omniWMTiling) ?? OmniWMTilingConfiguration()
         useHyprlandCursor = try c.decodeIfPresent(Bool.self, forKey: .useHyprlandCursor) ?? false
         experimentalWorkspaceTransitions = try c.decodeIfPresent(Bool.self, forKey: .experimentalWorkspaceTransitions) ?? true
     }
