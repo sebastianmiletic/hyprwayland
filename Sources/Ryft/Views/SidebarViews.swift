@@ -127,7 +127,7 @@ struct RightSidebarView: View {
                 }.transition(.move(edge: .leading).combined(with: .opacity))
             } else {
                 VStack(spacing: 10) {
-                    HStack { Button { model.rightSidebarDetail = "" } label: { Label("Controls", systemImage: "chevron.left") }.buttonStyle(.plain); Spacer(); Text(model.rightSidebarDetail).font(.headline); Spacer().frame(width: 55) }
+                    HStack { Button { model.rightSidebarDetail = "" } label: { Label("Controls", systemImage: "chevron.left") }.buttonStyle(.plain); Spacer(); Text(detailTitle).font(.headline).lineLimit(1); Spacer().frame(width: 55) }
                     detailView
                     if !controls.operationMessage.isEmpty { Text(controls.operationMessage).font(.caption).foregroundStyle(Color(hex: palette.muted)).lineLimit(2) }
                 }.padding(6).transition(.move(edge: .trailing).combined(with: .opacity))
@@ -195,7 +195,7 @@ struct RightSidebarView: View {
     }
     private var wifiDetail: some View {
         VStack(spacing: 10) {
-            HStack { VStack(alignment: .leading, spacing: 2) { Text(controls.connectedSSID == "Not connected" ? "WI-FI" : "WI-FI · \(controls.connectedSSID)").font(.headline).lineLimit(1); Text(controls.wifiEnabled ? "Available networks" : "Wireless is off").font(.caption).foregroundStyle(Color(hex: palette.muted)) }; Spacer(); Toggle("", isOn: Binding(get: { controls.wifiEnabled }, set: { controls.setWiFiEnabled($0) })).labelsHidden(); Button { controls.scanWiFi() } label: { if controls.scanningWiFi { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.clockwise") } }.buttonStyle(.plain) }
+            HStack { Text(controls.wifiEnabled ? "Available networks" : "Wireless is off").font(.caption).foregroundStyle(Color(hex: palette.muted)); Spacer(); Toggle("", isOn: Binding(get: { controls.wifiEnabled }, set: { controls.setWiFiEnabled($0) })).labelsHidden(); Button { controls.scanWiFi() } label: { if controls.scanningWiFi { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.clockwise") } }.buttonStyle(.plain) }
             ScrollView {
                 LazyVStack(spacing: 5) {
                     ForEach(controls.wifiNetworks) { network in
@@ -243,6 +243,10 @@ struct RightSidebarView: View {
     private var batterySymbol: String {
         if controls.batteryCharging { return "battery.100percent.bolt" }
         switch controls.batteryLevel { case 90...: return "battery.100percent"; case 65..<90: return "battery.75percent"; case 40..<65: return "battery.50percent"; case 15..<40: return "battery.25percent"; default: return "battery.0percent" }
+    }
+    private var detailTitle: String {
+        if model.rightSidebarDetail == "Wi-Fi", controls.connectedSSID != "Not connected" { return "WI-FI - \(controls.connectedSSID)" }
+        return model.rightSidebarDetail
     }
     private var batteryColor: Color { controls.lowPowerMode ? .yellow : .white }
     private func signalIcon(_ value: Int) -> String { value > -55 ? "wifi" : value > -72 ? "wifi" : "wifi.exclamationmark" }

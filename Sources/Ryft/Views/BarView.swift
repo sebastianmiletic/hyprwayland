@@ -637,7 +637,7 @@ private struct StatusQuickPopover: View {
                 } else {
                     Image(systemName: icon).foregroundStyle(iconColor).frame(width: 26, height: 26).background(Color(hex: palette.surface)).clipShape(Circle())
                 }
-                Text(detail == "Wi-Fi" && controls.connectedSSID != "Not connected" ? "WI-FI · \(controls.connectedSSID)" : detail).font(.system(size: 15, weight: .semibold, design: .rounded)).lineLimit(1); Spacer()
+                Text(detail == "Wi-Fi" && controls.connectedSSID != "Not connected" ? "WI-FI - \(controls.connectedSSID)" : detail).font(.system(size: 15, weight: .semibold, design: .rounded)).lineLimit(1); Spacer()
             }
             Rectangle().fill(Color(hex: palette.muted).opacity(0.25)).frame(height: 1)
             if detail == "Wi-Fi" { wifiContent }
