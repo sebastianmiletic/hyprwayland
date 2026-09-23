@@ -19,8 +19,14 @@ struct ThemePalette: Codable, Equatable, Identifiable {
 }
 
 enum BarPresentation: String, Codable, CaseIterable, Identifiable {
-    case floating = "Floating", edges = "Touching edges", top = "Top and edges"
+    case floating = "Floating", edges = "Touching edges", top = "Flush with edges"
     var id: String { rawValue }
+}
+enum BarPosition: String, Codable, CaseIterable, Identifiable {
+    case top = "Top", bottom = "Bottom", left = "Left", right = "Right"
+    var id: String { rawValue }
+    var isVertical: Bool { self == .left || self == .right }
+    var popoverEdge: Edge { switch self { case .top: .top; case .bottom: .bottom; case .left: .leading; case .right: .trailing } }
 }
 enum BarBlurStyle: String, Codable, CaseIterable, Identifiable { case thin = "Thin", regular = "Regular", thick = "Thick"; var id: String { rawValue } }
 enum BuiltInBarStyle: String, CaseIterable, Identifiable {
@@ -149,6 +155,7 @@ struct BarConfiguration: Codable, Equatable {
     var panelBlurEnabled = true
     var panelOpacity: Double = 0.88
     var presentation: BarPresentation = .floating
+    var position: BarPosition = .top
     var showOnAllDisplays = true
     var reserveNotchSpace = true
     var splitAroundNotch = true
@@ -163,7 +170,7 @@ struct BarConfiguration: Codable, Equatable {
     var palette: ThemePalette = .sebastian
     var widgets: [WidgetConfiguration] = WidgetConfiguration.defaults
 
-    enum CodingKeys: String, CodingKey { case enabled, height, horizontalInset, outerInset, itemSpacing, cornerRadius, opacity, showBackground, sourceExact, blurEnabled, blurStyle, panelBlurEnabled, panelOpacity, presentation, showOnAllDisplays, reserveNotchSpace, splitAroundNotch, notchMaskEnabled, notchMaskHeight, notchShelfCornerRadius, roundBottomDisplayCorners, displayCornerRadius, manualNotchWidth, workspaceCount, showWorkspaceAppIcons, palette, widgets }
+    enum CodingKeys: String, CodingKey { case enabled, height, horizontalInset, outerInset, itemSpacing, cornerRadius, opacity, showBackground, sourceExact, blurEnabled, blurStyle, panelBlurEnabled, panelOpacity, presentation, position, showOnAllDisplays, reserveNotchSpace, splitAroundNotch, notchMaskEnabled, notchMaskHeight, notchShelfCornerRadius, roundBottomDisplayCorners, displayCornerRadius, manualNotchWidth, workspaceCount, showWorkspaceAppIcons, palette, widgets }
     enum LegacyCodingKeys: String, CodingKey { case floating, connectedPanel }
     init() {}
     init(from decoder: Decoder) throws {
@@ -186,6 +193,7 @@ struct BarConfiguration: Codable, Equatable {
         else if try legacy.decodeIfPresent(Bool.self, forKey: .connectedPanel) == true { presentation = .top }
         else if try legacy.decodeIfPresent(Bool.self, forKey: .floating) == false { presentation = .edges }
         else { presentation = .floating }
+        position = try c.decodeIfPresent(BarPosition.self, forKey: .position) ?? .top
         showOnAllDisplays = try c.decodeIfPresent(Bool.self, forKey: .showOnAllDisplays) ?? true
         reserveNotchSpace = try c.decodeIfPresent(Bool.self, forKey: .reserveNotchSpace) ?? true
         splitAroundNotch = try c.decodeIfPresent(Bool.self, forKey: .splitAroundNotch) ?? true

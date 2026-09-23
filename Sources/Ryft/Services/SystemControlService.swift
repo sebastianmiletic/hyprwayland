@@ -90,9 +90,10 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         switch locationManager.authorizationStatus {
         case .authorized, .authorizedAlways: scanWiFi()
         case .notDetermined:
-            let key = "RyftRequestedWiFiLocation"
-            if !UserDefaults.standard.bool(forKey: key) { UserDefaults.standard.set(true, forKey: key); locationManager.requestAlwaysAuthorization() }
-            else { operationMessage = "Allow Location once to list nearby Wi-Fi networks." }
+            // This method is only reached after an explicit user click. Asking
+            // every time the state is genuinely undetermined also recovers from
+            // a TCC reset instead of being blocked by stale app preferences.
+            locationManager.requestWhenInUseAuthorization()
         case .denied, .restricted: operationMessage = "Allow Location in Privacy & Security to list nearby Wi-Fi networks."
         @unknown default: operationMessage = "Nearby Wi-Fi networks are unavailable."
         }

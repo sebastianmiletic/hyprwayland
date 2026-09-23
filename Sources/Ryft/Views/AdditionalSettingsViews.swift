@@ -335,6 +335,13 @@ struct GeneralSettingsView: View {
 
     private func openPrivacyPane(_ pane: String) {
         NSApp.keyWindow?.orderOut(nil)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") { NSWorkspace.shared.open(url) }
+        let legacy = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
+        let modern = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?\(pane)")
+        let target = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 13 ? (modern ?? legacy) : legacy
+        guard let target else { return }
+        NSWorkspace.shared.open(target, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            guard error != nil, let legacy, legacy != target else { return }
+            NSWorkspace.shared.open(legacy)
+        }
     }
 }

@@ -24,6 +24,7 @@ final class BarPanelController {
         let panel: NSPanel
         let context: PanelContext
         let cornerPanels: [NSPanel]
+        let menuBarCoverPanel: NSPanel
     }
 
     private let model: AppModel
@@ -47,7 +48,7 @@ final class BarPanelController {
     private func synchronize(_ optionalConfig: BarConfiguration?) {
         guard let config = optionalConfig else { return }
         guard config.enabled else {
-            entries.forEach { $0.panel.orderOut(nil); $0.cornerPanels.forEach { $0.orderOut(nil) } }
+            entries.forEach { $0.panel.orderOut(nil); $0.cornerPanels.forEach { $0.orderOut(nil) }; $0.menuBarCoverPanel.orderOut(nil) }
             entries.removeAll()
             return
         }
@@ -55,7 +56,7 @@ final class BarPanelController {
         let desiredScreens = config.showOnAllDisplays ? NSScreen.screens : [NSScreen.main].compactMap { $0 }
         let desiredIDs = Set(desiredScreens.compactMap(screenID))
 
-        for entry in entries where !desiredIDs.contains(entry.screenID) { entry.panel.orderOut(nil); entry.cornerPanels.forEach { $0.orderOut(nil) } }
+        for entry in entries where !desiredIDs.contains(entry.screenID) { entry.panel.orderOut(nil); entry.cornerPanels.forEach { $0.orderOut(nil) }; entry.menuBarCoverPanel.orderOut(nil) }
         entries.removeAll { !desiredIDs.contains($0.screenID) }
 
         for screen in desiredScreens {
@@ -67,6 +68,7 @@ final class BarPanelController {
                 entries.append(entry)
                 entry.panel.orderFrontRegardless()
                 updateCornerPanels(entry.cornerPanels, on: screen, config: config)
+                updateMenuBarCover(entry.menuBarCoverPanel, on: screen, config: config)
             }
         }
     }
@@ -93,7 +95,8 @@ final class BarPanelController {
         panel.ignoresMouseEvents = false
         panel.contentView = NSHostingView(rootView: StableBarRoot(model: model, context: context))
         let corners = [makeCornerPanel(isLeft: true), makeCornerPanel(isLeft: false)]
-        return PanelEntry(screenID: id, panel: panel, context: context, cornerPanels: corners)
+        let menuBarCover = makeMenuBarCoverPanel(context: context)
+        return PanelEntry(screenID: id, panel: panel, context: context, cornerPanels: corners, menuBarCoverPanel: menuBarCover)
     }
 
     private func update(_ entry: PanelEntry, on screen: NSScreen, config: BarConfiguration) {
@@ -109,6 +112,23 @@ final class BarPanelController {
         if !entry.panel.frame.equalTo(frame) { entry.panel.setFrame(frame, display: true, animate: false) }
         if !entry.panel.isVisible { entry.panel.orderFrontRegardless() }
         updateCornerPanels(entry.cornerPanels, on: screen, config: config)
+        updateMenuBarCover(entry.menuBarCoverPanel, on: screen, config: config)
+    }
+
+    private func makeMenuBarCoverPanel(context: PanelContext) -> NSPanel {
+        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 1)
+        panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = false; panel.hidesOnDeactivate = false; panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        panel.contentView = NSHostingView(rootView: MenuBarCoverRoot(context: context))
+        return panel
+    }
+
+    private func updateMenuBarCover(_ panel: NSPanel, on screen: NSScreen, config: BarConfiguration) {
+        guard config.position != .top else { panel.orderOut(nil); return }
+        let height = max(24, screen.safeAreaInsets.top)
+        panel.setFrame(NSRect(x: screen.frame.minX, y: screen.frame.maxY - height, width: screen.frame.width, height: height), display: true)
+        panel.orderFrontRegardless()
     }
 
     private func makeCornerPanel(isLeft: Bool) -> NSPanel {
@@ -131,20 +151,25 @@ final class BarPanelController {
     }
 
     private func panelFrame(on screen: NSScreen, config: BarConfiguration) -> NSRect {
-        let verticalInsets = config.presentation == .top ? 0 : config.outerInset * 2
-        let totalHeight = config.height + verticalInsets + topReservedHeight(for: screen, config: config)
-        return NSRect(x: screen.frame.minX, y: screen.frame.maxY - totalHeight, width: screen.frame.width, height: totalHeight)
+        let edgeInsets = config.presentation == .top ? 0 : config.outerInset * 2
+        let thickness = config.height + edgeInsets + (config.position == .top ? topReservedHeight(for: screen, config: config) : 0)
+        switch config.position {
+        case .top: return NSRect(x: screen.frame.minX, y: screen.frame.maxY - thickness, width: screen.frame.width, height: thickness)
+        case .bottom: return NSRect(x: screen.frame.minX, y: screen.frame.minY, width: screen.frame.width, height: thickness)
+        case .left: return NSRect(x: screen.frame.minX, y: screen.frame.minY, width: thickness, height: screen.frame.height)
+        case .right: return NSRect(x: screen.frame.maxX - thickness, y: screen.frame.minY, width: thickness, height: screen.frame.height)
+        }
     }
 
     private func notchWidth(for screen: NSScreen, config: BarConfiguration) -> Double {
-        guard (config.reserveNotchSpace || config.splitAroundNotch), !config.notchMaskEnabled else { return 0 }
+        guard config.position == .top, (config.reserveNotchSpace || config.splitAroundNotch), !config.notchMaskEnabled else { return 0 }
         if config.manualNotchWidth > 0 { return config.manualNotchWidth }
         guard let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return 0 }
         return max(0, right.minX - left.maxX)
     }
 
     private func topReservedHeight(for screen: NSScreen, config: BarConfiguration) -> Double {
-        guard config.notchMaskEnabled else { return 0 }
+        guard config.position == .top, config.notchMaskEnabled else { return 0 }
         if config.notchMaskHeight > 0 { return config.notchMaskHeight }
         guard screen.auxiliaryTopLeftArea != nil || screen.auxiliaryTopRightArea != nil else { return 0 }
         return max(screen.safeAreaInsets.top, 32)
@@ -175,6 +200,11 @@ final class BarPanelController {
                 }.fill(Color(red: 0, green: 0, blue: 0)).scaleEffect(x: isLeft ? 1 : -1, y: 1)
             }
         }
+    }
+
+    private struct MenuBarCoverRoot: View {
+        @ObservedObject var context: PanelContext
+        var body: some View { WallpaperMenuBarCover(path: context.wallpaperPath, screenSize: context.screenSize) }
     }
 
     private struct StableBarRoot: View {

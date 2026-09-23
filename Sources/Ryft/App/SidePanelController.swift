@@ -74,16 +74,27 @@ final class SidePanelController {
     }
     private func targetFrame(side: Side) -> NSRect {
         guard let screen = NSScreen.main else { return .zero }
-        let screenFrame = screen.visibleFrame
+        var usable = screen.visibleFrame
         let margin: CGFloat = 7
         let bar = model.configuration.bar
-        let shelf = bar.notchMaskEnabled ? (bar.notchMaskHeight > 0 ? bar.notchMaskHeight : Double(screen.safeAreaInsets.top)) : 0
-        let barInsets = bar.presentation == .top ? 0 : bar.outerInset * 2
-        let barClearance = bar.enabled ? CGFloat(bar.height + barInsets + shelf) + 6 : 18
-        let top = min(screenFrame.maxY - 10, screen.frame.maxY - barClearance)
-        let width: CGFloat = 420
-        let x = side == .left ? screenFrame.minX + margin : screenFrame.maxX - width - margin
-        return NSRect(x: x, y: screenFrame.minY + margin, width: width, height: max(320, top - screenFrame.minY - margin))
+        if bar.enabled {
+            let shelf = bar.position == .top && bar.notchMaskEnabled ? (bar.notchMaskHeight > 0 ? bar.notchMaskHeight : Double(screen.safeAreaInsets.top)) : 0
+            let barInsets = bar.presentation == .top ? 0 : bar.outerInset * 2
+            let reserved = CGFloat(bar.height + barInsets + shelf) + 6
+            switch bar.position {
+            case .top: usable.size.height = max(0, min(usable.maxY, screen.frame.maxY - reserved) - usable.minY)
+            case .bottom:
+                let edge = screen.frame.minY + reserved; let removed = max(0, edge - usable.minY)
+                usable.origin.y += removed; usable.size.height -= removed
+            case .left:
+                let edge = screen.frame.minX + reserved; let removed = max(0, edge - usable.minX)
+                usable.origin.x += removed; usable.size.width -= removed
+            case .right: usable.size.width = max(0, min(usable.maxX, screen.frame.maxX - reserved) - usable.minX)
+            }
+        }
+        let width = min(CGFloat(420), max(320, usable.width - margin * 2))
+        let x = side == .left ? usable.minX + margin : usable.maxX - width - margin
+        return NSRect(x: x, y: usable.minY + margin, width: width, height: max(320, usable.height - margin * 2))
     }
     private func present(_ panel: FloatingPanel, side: Side) {
         let target = targetFrame(side: side)

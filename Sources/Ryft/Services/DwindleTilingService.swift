@@ -325,13 +325,24 @@ final class DwindleTilingService: ObservableObject {
         let shouldReserveBar = bar.enabled && (bar.showOnAllDisplays || screen == NSScreen.main)
         if shouldReserveBar {
             let insets = bar.presentation == .top ? 0 : bar.outerInset * 2
-            let shelf: CGFloat
-            if bar.notchMaskEnabled {
-                shelf = bar.notchMaskHeight > 0 ? bar.notchMaskHeight : ((screen.auxiliaryTopLeftArea != nil || screen.auxiliaryTopRightArea != nil) ? max(screen.safeAreaInsets.top, 32) : 0)
-            } else { shelf = 0 }
-            let barBottom = display.minY + bar.height + insets + shelf
-            let removed = max(0, barBottom - frame.minY)
-            frame.origin.y += removed; frame.size.height -= removed
+            let shelf: CGFloat = bar.position == .top && bar.notchMaskEnabled
+                ? (bar.notchMaskHeight > 0 ? bar.notchMaskHeight : ((screen.auxiliaryTopLeftArea != nil || screen.auxiliaryTopRightArea != nil) ? max(screen.safeAreaInsets.top, 32) : 0))
+                : 0
+            let reserved = CGFloat(bar.height + insets) + shelf
+            switch bar.position {
+            case .top:
+                let edge = display.minY + reserved
+                let removed = max(0, edge - frame.minY)
+                frame.origin.y += removed; frame.size.height -= removed
+            case .bottom:
+                frame.size.height = max(0, min(frame.maxY, display.maxY - reserved) - frame.minY)
+            case .left:
+                let edge = display.minX + reserved
+                let removed = max(0, edge - frame.minX)
+                frame.origin.x += removed; frame.size.width -= removed
+            case .right:
+                frame.size.width = max(0, min(frame.maxX, display.maxX - reserved) - frame.minX)
+            }
         }
         let gap = max(0, min(configuration.outerGap, 40))
         return frame.insetBy(dx: gap, dy: gap)

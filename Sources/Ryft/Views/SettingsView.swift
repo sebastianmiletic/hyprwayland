@@ -286,13 +286,16 @@ private struct CurrentBarInspector: View {
     }
     private var shelfHeight: CGFloat { bar.notchMaskEnabled ? (bar.notchMaskHeight > 0 ? CGFloat(bar.notchMaskHeight) : max(NSScreen.main?.safeAreaInsets.top ?? 0, 32)) : 0 }
     private var barInsets: CGFloat { bar.presentation == .top ? 0 : bar.outerInset * 2 }
+    private var previewWidth: CGFloat { bar.position.isVertical ? bar.height + barInsets : screenWidth }
+    private var previewHeight: CGFloat { bar.position.isVertical ? min(NSScreen.main?.frame.height ?? 900, 520) : bar.height + barInsets + shelfHeight }
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: true) {
-            BarView(model: model, notchWidth: notchWidth, topReservedHeight: shelfHeight)
-                .frame(width: screenWidth, height: bar.height + barInsets + shelfHeight)
+        ScrollView([.horizontal, .vertical], showsIndicators: true) {
+            BarView(model: model, notchWidth: notchWidth, topReservedHeight: bar.position == .top ? shelfHeight : 0)
+                .frame(width: previewWidth, height: previewHeight)
                 .allowsHitTesting(false)
+                .frame(maxWidth: bar.position.isVertical ? .infinity : nil, alignment: bar.position == .right ? .trailing : .leading)
         }
-        .frame(height: bar.height + barInsets + shelfHeight + 12)
+        .frame(height: bar.position.isVertical ? 300 : previewHeight + 12)
         .background(Color(hex: "#202124"))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.1)))
@@ -302,7 +305,11 @@ private struct CurrentBarInspector: View {
 private struct BarStylePreview: View {
     @ObservedObject var model: AppModel
     let style: BuiltInBarStyle
-    private var preview: BarConfiguration { model.barConfiguration(for: style) }
+    private var preview: BarConfiguration {
+        var value = model.barConfiguration(for: style)
+        value.position = .top
+        return value
+    }
     var body: some View {
         Button { model.applyBarStyle(style) } label: {
             VStack(alignment: .leading, spacing: 8) {
@@ -333,11 +340,13 @@ private struct BarStylePreview: View {
 struct BarSettingsView: View {
     @ObservedObject var model: AppModel
     private var placementDescription: String {
+        let edge: String
         switch model.configuration.bar.presentation {
-        case .floating: return "Floating leaves space above and beside the bar."
-        case .edges: return "Touching edges reaches both sides while keeping space above."
-        case .top: return "Top and edges connects the bar to the complete upper edge."
+        case .floating: edge = "Floating leaves breathing room around the bar."
+        case .edges: edge = "Touching edges spans the display while retaining an outer gap."
+        case .top: edge = "Flush with edges attaches the bar directly to the selected display edge."
         }
+        return "\(model.configuration.bar.position.rawValue) edge. \(edge) Tiled windows automatically use the remaining work area."
     }
     var body: some View {
         SettingsGroup("Current bar · live at actual height") {
@@ -365,23 +374,29 @@ struct BarSettingsView: View {
         HStack(alignment: .top, spacing: 16) {
             SettingsGroup("Placement") {
                 Toggle("Show desktop bar", isOn: $model.configuration.bar.enabled)
-                Picker("Bar placement", selection: $model.configuration.bar.presentation) { ForEach(BarPresentation.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
+                Picker("Display edge", selection: $model.configuration.bar.position) { ForEach(BarPosition.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
+                Picker("Edge style", selection: $model.configuration.bar.presentation) { ForEach(BarPresentation.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
                 Text(placementDescription).font(.caption).foregroundStyle(.secondary)
                 Toggle("Show on every display", isOn: $model.configuration.bar.showOnAllDisplays)
-                Toggle("Black notch shelf", isOn: Binding(get: { model.configuration.bar.notchMaskEnabled }, set: { enabled in
-                    model.configuration.bar.notchMaskEnabled = enabled
-                    if enabled { model.configuration.bar.presentation = .top; model.configuration.bar.reserveNotchSpace = false }
-                }))
-                if model.configuration.bar.notchMaskEnabled {
-                    ValueSlider("Shelf height override", value: $model.configuration.bar.notchMaskHeight, range: 0...60, suffix: "pt")
-                    Text(model.configuration.bar.notchMaskHeight == 0 ? "Uses the MacBook safe-area height automatically. The shelf is a full-width, square-edged RGB 0,0,0 mask and the bar begins below it." : "The true-black shelf uses the chosen height and the bar begins immediately below it.").font(.caption).foregroundStyle(.secondary)
-                }
-                Toggle("Widgets avoid notch", isOn: $model.configuration.bar.reserveNotchSpace).disabled(model.configuration.bar.notchMaskEnabled)
-                Toggle("Bar avoids notch", isOn: $model.configuration.bar.splitAroundNotch).disabled(model.configuration.bar.notchMaskEnabled)
-                if (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled {
-                    ValueSlider("Notch width override", value: $model.configuration.bar.manualNotchWidth, range: 0...260, suffix: "pt")
-                    Text(model.configuration.bar.splitAroundNotch ? "The complete bar splits around the camera area, including its surface and widgets." : "Only widgets move clear of the camera area; the bar surface remains continuous.").font(.caption).foregroundStyle(.secondary)
-                    Text(model.configuration.bar.manualNotchWidth == 0 ? "Auto detects each display. Style previews show the spacing without drawing a notch." : "Manual width replaces safe-area detection on every display.").font(.caption).foregroundStyle(.secondary)
+                if model.configuration.bar.position == .top {
+                    Toggle("Black notch shelf", isOn: Binding(get: { model.configuration.bar.notchMaskEnabled }, set: { enabled in
+                        model.configuration.bar.notchMaskEnabled = enabled
+                        if enabled { model.configuration.bar.presentation = .top; model.configuration.bar.reserveNotchSpace = false }
+                    }))
+                    if model.configuration.bar.notchMaskEnabled {
+                        ValueSlider("Shelf height override", value: $model.configuration.bar.notchMaskHeight, range: 0...60, suffix: "pt")
+                        Text(model.configuration.bar.notchMaskHeight == 0 ? "Uses the MacBook safe-area height automatically. The shelf is a full-width, square-edged RGB 0,0,0 mask and the bar begins below it." : "The true-black shelf uses the chosen height and the bar begins immediately below it.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Toggle("Widgets avoid notch", isOn: $model.configuration.bar.reserveNotchSpace).disabled(model.configuration.bar.notchMaskEnabled)
+                    Toggle("Bar avoids notch", isOn: $model.configuration.bar.splitAroundNotch).disabled(model.configuration.bar.notchMaskEnabled)
+                    if (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled {
+                        ValueSlider("Notch width override", value: $model.configuration.bar.manualNotchWidth, range: 0...260, suffix: "pt")
+                        Text(model.configuration.bar.splitAroundNotch ? "The complete bar splits around the camera area, including its surface and widgets." : "Only widgets move clear of the camera area; the bar surface remains continuous.").font(.caption).foregroundStyle(.secondary)
+                        Text(model.configuration.bar.manualNotchWidth == 0 ? "Auto detects each display. Style previews show the spacing without drawing a notch." : "Manual width replaces safe-area detection on every display.").font(.caption).foregroundStyle(.secondary)
+                    }
+                } else {
+                    Label("The macOS menu bar remains hidden and wallpaper-covered at the top.", systemImage: "menubar.rectangle")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
                 Toggle("Round bottom display corners", isOn: $model.configuration.bar.roundBottomDisplayCorners)
@@ -391,7 +406,7 @@ struct BarSettingsView: View {
                 }
             }
             SettingsGroup("Geometry") {
-                ValueSlider("Height", value: $model.configuration.bar.height, range: 28...64, suffix: "pt")
+                ValueSlider(model.configuration.bar.position.isVertical ? "Width" : "Height", value: $model.configuration.bar.height, range: 28...64, suffix: "pt")
                 ValueSlider("Corner radius", value: $model.configuration.bar.cornerRadius, range: 0...30, suffix: "pt")
                 ValueSlider("Edge inset", value: $model.configuration.bar.horizontalInset, range: 0...30, suffix: "pt")
                 ValueSlider("Widget spacing", value: $model.configuration.bar.itemSpacing, range: 0...18, suffix: "pt")

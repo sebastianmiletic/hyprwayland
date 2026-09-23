@@ -31,44 +31,59 @@ struct BarView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let contentInset: Double = 12
-            let outerX = config.presentation == .floating ? config.horizontalInset : 0
-            let verticalInset = config.presentation == .top ? 0 : config.outerInset
-            let barWidth = max(0, proxy.size.width - outerX * 2)
-            let barHeight = max(0, proxy.size.height - topReservedHeight - verticalInset * 2)
-            let sideWidth = max(0, (barWidth - contentInset * 2 - effectiveNotchWidth) / 2)
-            ZStack(alignment: .top) {
-                if topReservedHeight > 0 {
-                    TrueBlackView().frame(width: proxy.size.width, height: topReservedHeight)
-                }
-                ZStack {
-                    barBackground
-                    HStack(spacing: 0) {
-                        HStack(spacing: config.itemSpacing) {
-                            zone(.leading)
-                            Spacer(minLength: 3)
-                            zone(.beforeNotch)
-                        }
-                        .frame(width: sideWidth, alignment: .leading)
-                        Color.clear.frame(width: effectiveNotchWidth).accessibilityHidden(true)
-                        HStack(spacing: config.itemSpacing) {
-                            zone(.afterNotch)
-                            Spacer(minLength: 3)
-                            zone(.trailing)
-                        }
-                        .frame(width: sideWidth, alignment: .trailing)
-                    }
-                    .padding(.horizontal, contentInset)
-                }
-                .frame(width: barWidth, height: barHeight)
-                .position(x: proxy.size.width / 2, y: topReservedHeight + barHeight / 2 + verticalInset)
-            }
+            if config.position.isVertical { verticalBar(in: proxy.size) }
+            else { horizontalBar(in: proxy.size) }
         }
         .font(.system(size: 12.5, weight: .medium, design: .rounded))
         .foregroundStyle(Color(hex: palette.foreground))
     }
 
-    private var effectiveNotchWidth: Double { notchWidth > 0 ? notchWidth + 16 : 8 }
+    private func horizontalBar(in size: CGSize) -> some View {
+        let contentInset: Double = 12
+        let outerX = config.presentation == .floating ? config.horizontalInset : 0
+        let verticalInset = config.presentation == .top ? 0 : config.outerInset
+        let barWidth = max(0, size.width - outerX * 2)
+        let barHeight = max(0, size.height - topReservedHeight - verticalInset * 2)
+        let sideWidth = max(0, (barWidth - contentInset * 2 - effectiveNotchWidth) / 2)
+        return ZStack(alignment: .top) {
+            if topReservedHeight > 0 { TrueBlackView().frame(width: size.width, height: topReservedHeight) }
+            ZStack {
+                barBackground
+                HStack(spacing: 0) {
+                    HStack(spacing: config.itemSpacing) { zone(.leading); Spacer(minLength: 3); zone(.beforeNotch) }
+                        .frame(width: sideWidth, alignment: .leading)
+                    Color.clear.frame(width: effectiveNotchWidth).accessibilityHidden(true)
+                    HStack(spacing: config.itemSpacing) { zone(.afterNotch); Spacer(minLength: 3); zone(.trailing) }
+                        .frame(width: sideWidth, alignment: .trailing)
+                }.padding(.horizontal, contentInset)
+            }
+            .frame(width: barWidth, height: barHeight)
+            .position(x: size.width / 2, y: topReservedHeight + barHeight / 2 + verticalInset)
+        }
+    }
+
+    private func verticalBar(in size: CGSize) -> some View {
+        let longInset = config.presentation == .floating ? config.horizontalInset : 0
+        let edgeInset = config.presentation == .top ? 0 : config.outerInset
+        let barWidth = max(0, size.width - edgeInset * 2)
+        let barHeight = max(0, size.height - longInset * 2)
+        return ZStack {
+            barSurface
+            VStack(spacing: config.itemSpacing) {
+                verticalZone(.leading)
+                Spacer(minLength: 4)
+                verticalZone(.beforeNotch)
+                Spacer(minLength: 8)
+                verticalZone(.afterNotch)
+                Spacer(minLength: 4)
+                verticalZone(.trailing)
+            }.padding(.vertical, 10).frame(maxWidth: .infinity)
+        }
+        .frame(width: barWidth, height: barHeight)
+        .position(x: size.width / 2, y: size.height / 2)
+    }
+
+    private var effectiveNotchWidth: Double { config.position == .top && notchWidth > 0 ? notchWidth + 16 : 8 }
     private var barShape: RoundedRectangle { RoundedRectangle(cornerRadius: config.presentation == .floating ? config.cornerRadius : 0, style: .continuous) }
     @ViewBuilder private var barSurface: some View {
         if config.blurEnabled {
@@ -91,6 +106,25 @@ struct BarView: View {
         } else if config.splitAroundNotch && notchWidth > 0 {
             HStack(spacing: effectiveNotchWidth) { barSurface; barSurface }
         } else { barSurface }
+    }
+
+    private func verticalZone(_ placement: WidgetPlacement) -> some View {
+        VStack(spacing: config.itemSpacing) {
+            ForEach(widgets(placement)) { widget in
+                if widget.kind == .spacer { Spacer(minLength: 8) }
+                else if editing {
+                    WidgetView(model: model, system: system, controls: model.controls, workspaces: workspaces, widget: widget, interactionID: nil, actionEnabled: false)
+                        .contentShape(Rectangle()).onTapGesture { onSelectWidget?(widget.id) }
+                        .onDrag { NSItemProvider(object: widget.id.uuidString as NSString) }
+                        .onDrop(of: [UTType.text], delegate: WidgetZoneDropDelegate(model: model, placement: placement, before: widget.id, enabled: true))
+                } else {
+                    WidgetView(model: model, system: system, controls: model.controls, workspaces: workspaces, widget: widget, interactionID: interactionID, actionEnabled: interactionID != nil)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .modifier(ZoneDropModifier(model: model, placement: placement, enabled: editing))
     }
 
     private func zone(_ placement: WidgetPlacement) -> some View {
@@ -202,6 +236,9 @@ private struct WidgetView: View {
     let interactionID: UUID?
     let actionEnabled: Bool
     private var palette: ThemePalette { model.configuration.bar.palette }
+    private var workspaceLayout: AnyLayout {
+        model.configuration.bar.position.isVertical ? AnyLayout(VStackLayout(spacing: 2)) : AnyLayout(HStackLayout(spacing: 2))
+    }
 
     @ViewBuilder var body: some View {
         if widget.kind == .workspaces {
@@ -214,14 +251,14 @@ private struct WidgetView: View {
         } else if widget.kind == .wallpaper || widget.kind == .uptime || widget.kind == .clock {
             Button { if actionEnabled { showStatusPopover(for: widget.kind) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.kind == .wallpaper ? "Choose wallpaper" : "Application resource usage")
-                .popover(isPresented: popoverPresented, arrowEdge: .top) { statusPopover }
+                .popover(isPresented: popoverPresented, arrowEdge: model.configuration.bar.position.popoverEdge) { statusPopover }
         } else if widget.kind == .battery {
             Button { if actionEnabled { controls.setLowPowerMode(!controls.lowPowerMode) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel("Toggle Low Power Mode").help(controls.lowPowerMode ? "Turn Low Power Mode off" : "Turn Low Power Mode on")
         } else if [.wifi, .volume].contains(widget.kind) {
             Button { if actionEnabled { showStatusPopover(for: widget.kind) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.name)
-                .popover(isPresented: popoverPresented, arrowEdge: .top) { statusPopover }
+                .popover(isPresented: popoverPresented, arrowEdge: model.configuration.bar.position.popoverEdge) { statusPopover }
         } else if widget.clickAction != .none {
             Button { if actionEnabled { performAction() } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.name)
@@ -233,7 +270,7 @@ private struct WidgetView: View {
     @ViewBuilder private var content: some View {
         switch widget.kind {
         case .workspaces:
-            HStack(spacing: 2) {
+            workspaceLayout {
                 ForEach(1...max(workspaces.canReadSpaces ? workspaces.desktopCount : model.configuration.bar.workspaceCount, 1), id: \.self) { number in
                     Button {
                         if actionEnabled { workspaces.switchTo(number) { model.statusMessage = $0 } }
@@ -265,7 +302,12 @@ private struct WidgetView: View {
             .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.14), value: workspaces.currentDesktop)
         case .clock:
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                widgetLabel(context.date.formatted(date: .abbreviated, time: .shortened)).monospacedDigit()
+                if model.configuration.bar.position.isVertical {
+                    VStack(spacing: 1) {
+                        Text(context.date.formatted(.dateTime.hour().minute())).font(.system(size: 10, weight: .semibold, design: .rounded))
+                        Text(context.date.formatted(.dateTime.weekday(.narrow))).font(.system(size: 9, weight: .medium, design: .rounded)).foregroundStyle(Color(hex: palette.muted))
+                    }.monospacedDigit()
+                } else { widgetLabel(context.date.formatted(date: .abbreviated, time: .shortened)).monospacedDigit() }
             }
         case .leftSidebar: widgetLabel("Tools").foregroundStyle(.white)
         case .wallpaper: widgetLabel("Wallpapers")
@@ -276,12 +318,13 @@ private struct WidgetView: View {
                 if widget.showIcon {
                     BatteryGaugeIcon(level: controls.batteryLevel, charging: controls.batteryCharging, color: batteryColor, background: Color(hex: palette.background))
                 }
-                if widget.showLabel { Text(controls.batteryPercent).lineLimit(1) }
+                if widget.showLabel && !model.configuration.bar.position.isVertical { Text(controls.batteryPercent).lineLimit(1) }
             }
         case .volume: widgetLabel("\(Int(controls.outputVolume))%")
         case .uptime: widgetLabel("CPU \(system.cpu) · RAM \(system.memory)")
         case .rightSidebar:
-            if model.configuration.bar.sourceExact {
+            if model.configuration.bar.position.isVertical { widgetLabel("Controls") }
+            else if model.configuration.bar.sourceExact {
                 HStack(spacing: 12) {
                     batteryDetailButton
                     detailButton("keyboard", detail: "")
@@ -342,7 +385,7 @@ private struct WidgetView: View {
     private func widgetLabel(_ value: String) -> some View {
         HStack(spacing: 6) {
             if widget.showIcon { WidgetIcon(value: widget.icon) }
-            if widget.showLabel { Text(value).lineLimit(1) }
+            if widget.showLabel && !model.configuration.bar.position.isVertical { Text(value).lineLimit(1) }
         }
     }
     private func performAction() {
@@ -794,7 +837,9 @@ struct EditableBarCanvas: View {
         GeometryReader { proxy in
             ZStack(alignment: .top) {
                 LinearGradient(colors: [Color(hex: model.configuration.bar.palette.muted).opacity(0.28), Color(hex: model.configuration.bar.palette.background).opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                BarView(model: model, notchWidth: (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled ? min(180, proxy.size.width * 0.18) : 0, topReservedHeight: model.configuration.bar.notchMaskEnabled ? 32 : 0, editing: true) { selectedWidgetID = $0 }
+                BarView(model: model, notchWidth: (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled ? min(180, proxy.size.width * 0.18) : 0, topReservedHeight: model.configuration.bar.position == .top && model.configuration.bar.notchMaskEnabled ? 32 : 0, editing: true) { selectedWidgetID = $0 }
+                    .frame(width: model.configuration.bar.position.isVertical ? model.configuration.bar.height + (model.configuration.bar.presentation == .top ? 0 : model.configuration.bar.outerInset * 2) : proxy.size.width)
+                    .frame(maxWidth: .infinity, alignment: model.configuration.bar.position == .right ? .trailing : .leading)
                 Text("Drag widgets directly on the bar. The center spacing previews notch avoidance without drawing the notch.")
                     .font(.caption).foregroundStyle(.white.opacity(0.82)).padding(.horizontal, 10).padding(.vertical, 6)
                     .background(.black.opacity(0.5)).clipShape(Capsule()).frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 8)
@@ -812,10 +857,12 @@ struct BarPreview: View {
         GeometryReader { proxy in
             ZStack(alignment: .top) {
                 LinearGradient(colors: [Color(hex: model.configuration.bar.palette.muted).opacity(0.34), Color(hex: model.configuration.bar.palette.background).opacity(0.72)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                BarView(model: model, notchWidth: (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled ? min(180, proxy.size.width * 0.18) : 0, topReservedHeight: model.configuration.bar.notchMaskEnabled ? 32 : 0)
+                BarView(model: model, notchWidth: (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled ? min(180, proxy.size.width * 0.18) : 0, topReservedHeight: model.configuration.bar.position == .top && model.configuration.bar.notchMaskEnabled ? 32 : 0)
+                    .frame(width: model.configuration.bar.position.isVertical ? model.configuration.bar.height + (model.configuration.bar.presentation == .top ? 0 : model.configuration.bar.outerInset * 2) : proxy.size.width)
+                    .frame(maxWidth: .infinity, alignment: model.configuration.bar.position == .right ? .trailing : .leading)
             }
         }
-        .frame(height: max(86, model.configuration.bar.height + (model.configuration.bar.presentation == .top ? 0 : model.configuration.bar.outerInset * 2) + 28 + (model.configuration.bar.notchMaskEnabled ? 32 : 0)))
+        .frame(height: model.configuration.bar.position.isVertical ? 260 : max(86, model.configuration.bar.height + (model.configuration.bar.presentation == .top ? 0 : model.configuration.bar.outerInset * 2) + 28 + (model.configuration.bar.notchMaskEnabled ? 32 : 0)))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(.primary.opacity(0.1)))
     }
