@@ -37,7 +37,7 @@ final class AppModel: ObservableObject {
     let controls = SystemControlService()
     lazy var notifications = NotificationDaemon(controls: controls)
     let workspaces = WorkspaceService()
-    let tiling = OmniWMService()
+    let tiling = DwindleTilingService()
     let gemini = GeminiService()
     private let wallpaperTransition = WallpaperTransitionController()
 
@@ -188,9 +188,12 @@ final class AppModel: ObservableObject {
         workspaces.experimentalTransitionsEnabled = configuration.experimentalWorkspaceTransitions
         $configuration.map(\.experimentalWorkspaceTransitions).removeDuplicates().dropFirst()
             .sink { [weak self] in self?.workspaces.experimentalTransitionsEnabled = $0 }.store(in: &cancellables)
-        if configuration.omniWMTiling.enabled { tiling.setEnabled(true) }
-        $configuration.map(\.omniWMTiling.enabled).removeDuplicates().dropFirst()
+        tiling.updateBarConfiguration(configuration.bar)
+        if configuration.tiling.enabled { tiling.setEnabled(true) }
+        $configuration.map(\.tiling.enabled).removeDuplicates().dropFirst()
             .sink { [weak self] in self?.tiling.setEnabled($0) }.store(in: &cancellables)
+        $configuration.map(\.bar).removeDuplicates().dropFirst()
+            .sink { [weak self] in self?.tiling.updateBarConfiguration($0) }.store(in: &cancellables)
         if !configuration.hasCompletedOnboarding { selectedSection = .permissions }
         refreshWallpapers()
         save()

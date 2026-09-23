@@ -39,7 +39,7 @@ enum BuiltInBarStyle: String, CaseIterable, Identifiable {
     }
 }
 
-struct OmniWMTilingConfiguration: Codable, Equatable {
+struct TilingConfiguration: Codable, Equatable {
     var enabled = false
 }
 
@@ -292,11 +292,12 @@ struct RyftConfiguration: Codable, Equatable {
     var sourcePresetVersion = 13
     var launchAtLogin = false
     var hasCompletedOnboarding = false
-    var omniWMTiling = OmniWMTilingConfiguration()
+    var tiling = TilingConfiguration()
     var useHyprlandCursor = false
     var experimentalWorkspaceTransitions = true
 
-    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin, hasCompletedOnboarding, omniWMTiling, useHyprlandCursor, experimentalWorkspaceTransitions }
+    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin, hasCompletedOnboarding, tiling, useHyprlandCursor, experimentalWorkspaceTransitions }
+    enum LegacyCodingKeys: String, CodingKey { case omniWMTiling }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -314,7 +315,10 @@ struct RyftConfiguration: Codable, Equatable {
         // Existing installations have already reached the product. Only a
         // genuinely new configuration enters first-run onboarding.
         hasCompletedOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding) ?? true
-        omniWMTiling = try c.decodeIfPresent(OmniWMTilingConfiguration.self, forKey: .omniWMTiling) ?? OmniWMTilingConfiguration()
+        let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+        tiling = try c.decodeIfPresent(TilingConfiguration.self, forKey: .tiling)
+            ?? legacy.decodeIfPresent(TilingConfiguration.self, forKey: .omniWMTiling)
+            ?? TilingConfiguration()
         useHyprlandCursor = try c.decodeIfPresent(Bool.self, forKey: .useHyprlandCursor) ?? false
         experimentalWorkspaceTransitions = try c.decodeIfPresent(Bool.self, forKey: .experimentalWorkspaceTransitions) ?? true
     }

@@ -69,7 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationWillResignActive(_ notification: Notification) { AppModel.shared.save() }
-    func applicationWillTerminate(_ notification: Notification) { cursorTheme?.setEnabled(false); NSMenu.setMenuBarVisible(true); AppModel.shared.save() }
+    func applicationWillTerminate(_ notification: Notification) { cursorTheme?.setEnabled(false); AppModel.shared.tiling.shutdown(); NSMenu.setMenuBarVisible(true); AppModel.shared.save() }
     func showWallpaperGallery() { wallpaperController?.show() }
     func showSettings() {
         captureSettingsWindow()

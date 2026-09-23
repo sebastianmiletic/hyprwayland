@@ -14,4 +14,4 @@ The optional downloadable wallpaper collection comes from [ItsTerm1n4l/Wallpaper
 
 The optional Hyprland cursor uses the **Bibata Modern Classic** pointer from [ful1e5/Bibata_Cursor](https://github.com/ful1e5/Bibata_Cursor). The pointer source and GPL-3.0 license are bundled under `Sources/Ryft/Resources/ThirdParty/Bibata`; Ryft recolors the upstream SVG template to the Modern Classic white and dark palette and generates the bundled PNG from that source.
 
-Optional automatic Dwindle tiling is provided by the independently signed [OmniWM](https://github.com/OmniNull/OmniWM) application (GPL-2.0, copyright its contributors). Ryft downloads OmniWM's official notarized `v0.7.1` release only after an explicit install action, verifies its bundle identifier and Developer ID team, launches it as a separate process, and selects its Hyprland-style Dwindle layout. OmniWM source is not copied into Ryft.
+Ryft’s automatic tiler is an independent native implementation of the Dwindle interaction model associated with Hyprland and also used by projects such as [OmniWM](https://github.com/OmniNull/OmniWM). It does not include or execute OmniWM source or binaries.

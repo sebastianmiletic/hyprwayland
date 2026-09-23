@@ -147,47 +147,46 @@ struct SettingsGroup<Content: View>: View {
 
 struct TilingSettingsView: View {
     @ObservedObject var model: AppModel
-    @ObservedObject private var engine: OmniWMService
+    @ObservedObject private var engine: DwindleTilingService
 
     init(model: AppModel) {
         self.model = model
         engine = model.tiling
     }
 
+    private var statusColor: Color {
+        if !RyftPermissionStatus.accessibilityGranted { return .red }
+        if engine.managedApplicationCount >= 2 { return Color(hex: model.configuration.bar.palette.success) }
+        return Color(hex: model.configuration.bar.palette.accent)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             SettingsGroup("Automatic Dwindle tiling") {
-                Toggle("Tile newly opened windows automatically", isOn: $model.configuration.omniWMTiling.enabled)
+                Toggle("Tile applications automatically", isOn: $model.configuration.tiling.enabled)
                     .toggleStyle(.switch)
                 HStack(spacing: 8) {
-                    Circle().fill(engine.running && model.configuration.omniWMTiling.enabled ? Color.green : Color.secondary.opacity(0.45)).frame(width: 8, height: 8)
+                    Circle().fill(model.configuration.tiling.enabled ? statusColor : Color.secondary.opacity(0.45)).frame(width: 8, height: 8)
                     Text(engine.status).font(.callout).foregroundStyle(.secondary)
                     Spacer()
-                }
-                Text("Ryft uses OmniWM’s complete Dwindle engine: new windows split the available area, resize, and move into place automatically. OmniWM runs as its independently signed window-management engine and requires its own Accessibility and Input Monitoring approval.")
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    if !engine.installed {
-                        Button(engine.installing ? "Installing…" : "Install OmniWM 0.7.1") {
-                            engine.installAndEnable()
-                            model.configuration.omniWMTiling.enabled = true
-                        }.buttonStyle(SettingsHoverButtonStyle()).disabled(engine.installing)
-                    } else {
-                        Button("Open OmniWM") { engine.openOmniWM() }.buttonStyle(SettingsHoverButtonStyle())
+                    if model.configuration.tiling.enabled && !RyftPermissionStatus.accessibilityGranted {
+                        Button("Review Accessibility") { engine.openAccessibilitySettings() }.buttonStyle(.bordered)
                     }
-                    Button("Source & documentation") { engine.openSource() }.buttonStyle(SettingsHoverButtonStyle())
-                    Spacer()
                 }
+                Text("The Dwindle engine is built directly into Ryft. There is no helper application, second menu-bar item, download, or separate set of shortcuts.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            SettingsGroup("How it works") {
-                Label("Dwindle is selected as OmniWM’s default and current workspace layout.", systemImage: "rectangle.split.2x2")
-                Label("Window observation and placement continue while Ryft Settings is closed.", systemImage: "sparkles.rectangle.stack")
-                Label("OmniWM hotkeys stay off so Ryft’s Option+1–9 desktop controls remain authoritative.", systemImage: "keyboard")
-                Label("Turn the switch off to stop automatic rearrangement; existing window frames remain where they are.", systemImage: "power")
-                Text("OmniWM is GPL-2.0 software by the OmniWM contributors. Ryft downloads the official notarized release from GitHub and does not copy its engine into your configuration or saved bars.")
+            SettingsGroup("When Ryft rearranges windows") {
+                Label("One visible application is left completely untouched.", systemImage: "rectangle")
+                Label("Opening a second application splits the usable display area in half.", systemImage: "rectangle.split.2x1")
+                Label("Each additional application recursively splits the remaining area.", systemImage: "rectangle.split.2x2")
+                Label("The bar, Dock, display edges, fullscreen windows, and minimized windows stay clear.", systemImage: "arrow.down.right.and.arrow.up.left")
+                Label("Closing back to one application restores its original frame.", systemImage: "arrow.uturn.backward")
+                Text("Ryft manages one standard window per visible application on each display and only on the active Mission Control desktop. Turn tiling off to restore visible windows and stop all automatic placement.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+        .onAppear { engine.refresh() }
     }
 }
 
