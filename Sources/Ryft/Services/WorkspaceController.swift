@@ -15,6 +15,7 @@ struct WorkspaceController {
         // Never invoke kAXTrustedCheckOptionPrompt: repeated local builds can
         // otherwise look like unsolicited requests. Permission remains a user
         // decision in the macOS pane opened by this explicit action.
+        NSApp.keyWindow?.orderOut(nil)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) }
     }
 }

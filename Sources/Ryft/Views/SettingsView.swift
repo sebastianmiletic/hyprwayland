@@ -37,7 +37,7 @@ struct SettingsView: View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 9) {
-                    ZStack { RoundedRectangle(cornerRadius: 8).fill(Color(hex: model.configuration.bar.palette.accent)); Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundStyle(Color(hex: model.configuration.bar.palette.background)) }
+                    ZStack { RoundedRectangle(cornerRadius: 8).fill(Color(hex: model.configuration.bar.palette.accent)); Image(systemName: "sparkle").font(.system(size: 16, weight: .bold)).foregroundStyle(Color(hex: model.configuration.bar.palette.background)) }
                         .frame(width: 30, height: 30)
                     Text("Ryft").font(.system(size: 19, weight: .bold, design: .rounded))
                 }.padding(.horizontal, 12).padding(.bottom, 12)
@@ -176,6 +176,25 @@ struct TilingSettingsView: View {
                 Text("The Dwindle engine is built directly into Ryft. There is no helper application, second menu-bar item, download, or separate set of shortcuts.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
+            SettingsGroup("Layout tuning") {
+                ValueSlider("Window gap", value: $model.configuration.tiling.gap, range: 0...32, suffix: "pt")
+                ValueSlider("Display edge gap", value: $model.configuration.tiling.outerGap, range: 0...32, suffix: "pt")
+            }
+            SettingsGroup("Application exceptions") {
+                if model.configuration.tiling.excludedBundleIdentifiers.isEmpty {
+                    Text("Every resizable application can be tiled.").font(.callout).foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.configuration.tiling.excludedBundleIdentifiers, id: \.self) { identifier in
+                        HStack {
+                            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier) { Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().scaledToFit().frame(width: 24, height: 24); Text(url.deletingPathExtension().lastPathComponent) }
+                            else { Image(systemName: "app"); Text(identifier) }
+                            Spacer(); Button { model.configuration.tiling.excludedBundleIdentifiers.removeAll { $0 == identifier } } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(SettingsHoverButtonStyle())
+                        }
+                    }
+                }
+                Button { addException() } label: { Label("Add application exception", systemImage: "plus") }.buttonStyle(SettingsHoverButtonStyle())
+                Text("Excluded apps keep their own position and size and do not occupy a Dwindle slot.").font(.caption).foregroundStyle(.secondary)
+            }
             SettingsGroup("When Ryft rearranges windows") {
                 Label("One resizable application fills the complete safe work area.", systemImage: "rectangle")
                 Label("Opening a second application smoothly moves and resizes both windows into equal halves.", systemImage: "rectangle.split.2x1")
@@ -187,6 +206,15 @@ struct TilingSettingsView: View {
             }
         }
         .onAppear { engine.refresh() }
+    }
+
+    private func addException() {
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.application]; panel.directoryURL = URL(fileURLWithPath: "/Applications"); panel.canChooseDirectories = false; panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            guard let identifier = Bundle(url: url)?.bundleIdentifier, !model.configuration.tiling.excludedBundleIdentifiers.contains(identifier) else { continue }
+            model.configuration.tiling.excludedBundleIdentifiers.append(identifier)
+        }
     }
 }
 
@@ -356,7 +384,8 @@ struct BarSettingsView: View {
                 Text("0% is fully opaque. 100% is fully transparent. Blur uses a stable wallpaper-backed image so Space gestures cannot change its material emphasis or turn it black.").font(.caption).foregroundStyle(.secondary)
                 Divider()
                 Toggle("Blur sidebars and wallpaper gallery", isOn: $model.configuration.bar.panelBlurEnabled)
-                ValueSlider("Panel tint", value: $model.configuration.bar.panelOpacity, range: 0...1, suffix: "")
+                ValueSlider("Panel transparency", value: Binding(get: { 1 - model.configuration.bar.panelOpacity }, set: { model.configuration.bar.panelOpacity = 1 - $0 }), range: 0...1, suffix: "")
+                Text("0% is opaque. 100% reveals the desktop behind side panels and popovers.").font(.caption).foregroundStyle(.secondary)
             }
         }
     }

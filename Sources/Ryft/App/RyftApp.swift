@@ -151,7 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            button.image = NSImage(systemSymbolName: "rectangle.split.2x1.fill", accessibilityDescription: "Ryft")
+            button.image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "Ryft")
             button.image?.isTemplate = true
             button.toolTip = "Ryft"
         }

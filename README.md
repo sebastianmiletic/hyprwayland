@@ -1,13 +1,52 @@
+<p align="center">
+  <img src="docs/assets/ryft-logo.png" width="128" alt="Ryft sparkle logo">
+</p>
+
 # Ryft
 
-Ryft is a native macOS desktop bar and customization app inspired by Hyprland setups. It runs as a menu-bar utility without a Dock icon, renders its own notch-aware multi-display bar, and includes a live widget editor, global shortcut mapping, native wallpaper gallery, JSON profiles, shell widgets, and a port of the Sebastian II Quickshell bar from `sebastianmiletic/hyprland-dotfiles`.
+<p align="center"><strong>A native Hyprland-shaped desktop environment for macOS.</strong></p>
 
-Repository: <https://github.com/sebastianmiletic/ryft>
+<p align="center">
+  <a href="https://github.com/sebastianmiletic/ryft/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/sebastianmiletic/ryft"></a>
+  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-141313">
+  <img alt="Apple Silicon and Intel" src="https://img.shields.io/badge/Mac-Apple%20Silicon%20%7C%20Intel-CBC4CB">
+</p>
+
+Ryft is a native macOS desktop bar and customization app inspired by Hyprland setups. It runs without a Dock icon, renders a notch-aware multi-display bar, and includes built-in Dwindle tiling, Mission Control workspace controls, live widgets, side panels, a wallpaper library, global shortcuts, Gemini, profiles, and a source-faithful Sebastian II Quickshell preset.
+
+![Ryft desktop](docs/screenshots/ryft-1.png)
+
+## Gallery
+
+| Floating bar | Animated Dwindle layout |
+| --- | --- |
+| ![Ryft bar](docs/screenshots/ryft-4.png) | ![Ryft Dwindle tiling](docs/screenshots/ryft-2.png) |
+| ![Ryft desktop](docs/screenshots/ryft-5.png) | ![Ryft tiled workspaces](docs/screenshots/ryft-3.png) |
+
+## Highlights
+
+- Native AppKit and SwiftUI, no browser shell, SketchyBar, or background web service.
+- Built-in animated Dwindle tiling with per-app exceptions and adjustable gaps.
+- Notch-aware bar with Floating, Touching edges, and Top and edges placement.
+- Live battery, Wi-Fi, sound, CPU, RAM, workspace apps, calendar, and shared tasks.
+- Wallpaper carousel and gallery with cached thumbnails and per-Space application.
+- Gemini assistant with local history and non-interactive Keychain credentials.
+- Apple Silicon and Intel builds from the same source.
 
 ## Requirements
 
 - macOS 13 or newer
 - Swift 5.9 or newer to build
+
+## Install
+
+Download the matching ZIP from [Releases](https://github.com/sebastianmiletic/ryft/releases/latest):
+
+- **Apple Silicon** for M1, M2, M3, M4, and newer Macs.
+- **Intel** for Intel-based MacBook, iMac, Mac mini, and Mac Pro models.
+- **Universal** when you want one bundle that runs on either architecture.
+
+Unzip Ryft, move it to `/Applications`, then open it. macOS may ask you to confirm an app downloaded from the internet.
 
 ## Build and run
 
@@ -39,12 +78,17 @@ Move `dist/Ryft.app` to `/Applications` to make Launch at Login registration ava
 10. Wallpaper command shortcuts, including Option+W and Random Wallpaper, are removed from configuration and the keybind editor. Option+A and Option+N remain system-wide sidebar shortcuts. Bar controls use a consistent press response, the Controls button is a real button, and clicking Settings again closes its window.
 11. The assistant control is a simple white, rounded four-point sparkle. Gemini uses the source configuration’s exact text routing order and daily Pacific-time quotas: Gemini 3.5 Flash Lite, Gemini 3.1 Flash Lite, Gemma 4 31B, then Gemini 3.7, 3.6, and 3 Flash. It automatically falls back on unavailable or exhausted models, displays model usage and token counts, preserves local conversation history, and supports new chat, copy, and stop controls. The API key uses a non-interactive Keychain account so opening or using Gemini never requests the Mac login password. The source prompt behavior, temperature 0.5, macOS context substitutions, and output rules are preserved.
 12. The Transparency control is expressed in the expected direction: 0% is opaque and 100% is transparent. The experimental stationary bar stays above macOS Space motion. Optional Blur uses a cached wallpaper-backed texture instead of `NSVisualEffectView`. Changes save automatically to `~/Library/Application Support/Ryft/config.json`.
-13. Ryft never opens a Location prompt at launch. The first explicit Wi-Fi click may request Location once because macOS requires it to reveal SSIDs; the decision is remembered and never re-requested by Ryft. The themed Wi-Fi popover then lists every scanned network, supports secure password entry and Return-to-connect, and retains power/current-network controls.
+13. Ryft never opens a Location prompt at launch. After Location has been granted explicitly, nearby networks preload in the background. Saved macOS networks connect without another password; unknown secured networks reveal a password field only when selected. The custom Wi-Fi and sound panels dismiss on outside click and use themed animated controls instead of native dropdown menus.
 14. The first launch opens a concise, skippable Permissions and Quick Start flow. Those onboarding tabs disappear after completion; relevant experimental permissions remain available in General. The compact semi-transparent settings workbench gives custom buttons, navigation items, wallpapers, themes, and style previews consistent hover and press feedback.
 15. Use the Ryft icon in the macOS menu bar, or the gear widget in the desktop bar, to reopen settings after closing the window. Each opening lands on a one-time navigation home view showing the active wallpaper and clean Mac, system, memory, processor, display, and uptime specifications; Overview is intentionally absent from the settings navigation.
-16. General includes an optional Bibata Modern Classic cursor matching the source Hyprland setup. Because macOS has no cursor-theme API, Ryft implements it as an experimental global pointer overlay and restores the native cursor immediately when disabled or when Ryft quits. macOS does not expose a supported way to replace the native four-finger Mission Control animation; trackpad transitions retain Apple’s timing with the Ryft bar held stationary.
+16. General includes an optional compact black Bibata pointer matching the source Hyprland setup. Because macOS has no cursor-theme API, Ryft implements it as an experimental global pointer overlay and restores the native cursor immediately when disabled or when Ryft quits. macOS does not expose a supported way to replace the native four-finger Mission Control animation; trackpad transitions retain Apple’s timing with the Ryft bar held stationary.
+17. Clicking the clock opens a themed split calendar and task panel. Tasks are shared with the Controls sidebar and persist with the rest of the configuration.
 
 While Ryft runs, it hides the native menu bar and renders the matching wallpaper crop beneath its own bar so the system menu cannot show through transparent space. Native menu-bar visibility is restored when Ryft quits. Both side panels sit below this cover; Gemini stays open until explicitly dismissed, while Controls uses a longer inactivity timeout. The wallpaper manager dismisses on any outside click and uses shared, coalesced thumbnail caching instead of repeatedly decoding full-resolution files. The resource popover aggregates each application’s helper processes, shows its real icon, CPU load, resident-memory bytes, and physical-memory percentage, and refreshes once per second.
+
+## Permissions
+
+Ryft requests access only after an explicit user action. Accessibility powers tiling and control actions; Input Monitoring powers global shortcuts; Location lets macOS reveal Wi-Fi names; Notifications show Ryft battery warnings; Screen Recording is optional and used only for temporary workspace-transition frames. General Settings shows a red status dot while access is missing.
 
 ## Configuration
 

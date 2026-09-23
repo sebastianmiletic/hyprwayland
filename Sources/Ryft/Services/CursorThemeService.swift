@@ -23,8 +23,9 @@ final class CursorThemeService {
 
     private func start() {
         guard let imageURL = Bundle.module.url(forResource: "bibata-modern-classic-pointer", withExtension: "png"),
-              let image = NSImage(contentsOf: imageURL) else { enabled = false; return }
-        let size = NSSize(width: 42, height: 42)
+              let source = NSImage(contentsOf: imageURL) else { enabled = false; return }
+        let image = blackCursorImage(from: source)
+        let size = NSSize(width: 28, height: 28)
         let panel = NSPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.cursorWindow)) + 1)
         panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = false; panel.ignoresMouseEvents = true; panel.hidesOnDeactivate = false
@@ -63,9 +64,19 @@ final class CursorThemeService {
         guard enabled, let panel else { return }
         refreshDisplays()
         let point = NSEvent.mouseLocation
-        // Bibata's arrow tip is inset in its 256px source canvas.
-        let origin = NSPoint(x: point.x - 7, y: point.y - 38)
+        // Bibata's arrow tip is inset in its source canvas.
+        let origin = NSPoint(x: point.x - 4.5, y: point.y - 25.5)
         panel.setFrameOrigin(origin)
         if !panel.isVisible { panel.orderFrontRegardless() }
+    }
+
+    private func blackCursorImage(from source: NSImage) -> NSImage {
+        let image = NSImage(size: source.size)
+        image.lockFocus()
+        source.draw(in: NSRect(origin: .zero, size: source.size), from: .zero, operation: .sourceOver, fraction: 1)
+        NSColor(calibratedWhite: 0.04, alpha: 1).setFill()
+        NSRect(origin: .zero, size: source.size).fill(using: .sourceIn)
+        image.unlockFocus()
+        return image
     }
 }

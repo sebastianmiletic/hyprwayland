@@ -211,7 +211,7 @@ private struct WidgetView: View {
         } else if widget.kind == .rightSidebar {
             Button { if actionEnabled { performAction() } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.name)
-        } else if widget.kind == .wallpaper || widget.kind == .uptime {
+        } else if widget.kind == .wallpaper || widget.kind == .uptime || widget.kind == .clock {
             Button { if actionEnabled { showStatusPopover(for: widget.kind) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.kind == .wallpaper ? "Choose wallpaper" : "Application resource usage")
                 .popover(isPresented: popoverPresented, arrowEdge: .top) { statusPopover }
@@ -303,6 +303,7 @@ private struct WidgetView: View {
         if model.statusPopoverWidgetID == widget.id && model.statusPopoverInteractionID == interactionID {
             if model.statusPopoverDetail == "Wallpapers" { WallpaperBarPopover(model: model).frame(width: 520) }
             else if model.statusPopoverDetail == "Resources" { ResourceUsagePopover(model: model).frame(width: 390) }
+            else if model.statusPopoverDetail == "Calendar" { CalendarTodoPopover(model: model).frame(width: 560) }
             else { StatusQuickPopover(model: model, detail: model.statusPopoverDetail).frame(width: 300) }
         }
     }
@@ -310,8 +311,9 @@ private struct WidgetView: View {
         switch kind {
         case .wallpaper: model.statusPopoverDetail = "Wallpapers"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id
         case .uptime: model.statusPopoverDetail = "Resources"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; system.refresh()
-        case .wifi: model.statusPopoverDetail = "Wi-Fi"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.requestWiFiAccessAndScan()
-        case .volume: model.statusPopoverDetail = "Sound"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.refreshAudioDevices()
+        case .clock: model.statusPopoverDetail = "Calendar"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id
+        case .wifi: model.statusPopoverDetail = "Wi-Fi"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.prepareWiFiMenu()
+        case .volume: model.statusPopoverDetail = "Sound"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.prepareSoundMenu()
         case .battery: model.statusPopoverDetail = "Battery"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.refreshPowerState()
         default: break
         }
@@ -331,7 +333,7 @@ private struct WidgetView: View {
             guard actionEnabled else { return }
             if detail == "Battery" { controls.setLowPowerMode(!controls.lowPowerMode) }
             else if detail.isEmpty { NotificationCenter.default.post(name: .ryftToggleRightSidebar, object: nil) }
-            else { model.statusPopoverDetail = detail; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; if detail == "Wi-Fi" { controls.requestWiFiAccessAndScan() }; if detail == "Sound" { controls.refreshAudioDevices() } }
+            else { model.statusPopoverDetail = detail; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; if detail == "Wi-Fi" { controls.prepareWiFiMenu() }; if detail == "Sound" { controls.prepareSoundMenu() } }
         } label: {
             Image(systemName: icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24)
         }
@@ -357,6 +359,84 @@ private struct WidgetView: View {
         case .shell: ScriptWidgetRunner.runAction(widget.clickCommand)
         }
     }
+}
+
+private final class CalendarPopoverState: ObservableObject {
+    @Published var visibleMonth = Date()
+    @Published var selectedDate = Date()
+}
+
+private struct CalendarTodoPopover: View {
+    @ObservedObject var model: AppModel
+    @StateObject private var state = CalendarPopoverState()
+    private let calendar = Calendar.current
+    private var palette: ThemePalette { model.configuration.bar.palette }
+    private var monthTitle: String { state.visibleMonth.formatted(.dateTime.month(.wide).year()) }
+    private var days: [Date?] {
+        guard let interval = calendar.dateInterval(of: .month, for: state.visibleMonth),
+              let range = calendar.range(of: .day, in: .month, for: state.visibleMonth) else { return [] }
+        let weekday = calendar.component(.weekday, from: interval.start)
+        let leading = (weekday - calendar.firstWeekday + 7) % 7
+        return Array(repeating: nil, count: leading) + range.compactMap { calendar.date(byAdding: .day, value: $0 - 1, to: interval.start) }
+    }
+    private var weekdaySymbols: [String] {
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        let split = calendar.firstWeekday - 1
+        return Array(symbols[split...] + symbols[..<split])
+    }
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 12) {
+                HStack {
+                    Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(SourcePressButtonStyle())
+                    Spacer(); Text(monthTitle).font(.system(size: 16, weight: .semibold, design: .rounded)); Spacer()
+                    Button { moveMonth(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(SourcePressButtonStyle())
+                }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 5) {
+                    ForEach(weekdaySymbols, id: \.self) { Text($0.uppercased()).font(.system(size: 9, weight: .bold)).foregroundStyle(Color(hex: palette.muted)) }
+                    ForEach(Array(days.enumerated()), id: \.offset) { _, day in
+                        if let day {
+                            Button { state.selectedDate = day } label: {
+                                Text("\(calendar.component(.day, from: day))").font(.system(size: 11, weight: calendar.isDateInToday(day) ? .bold : .medium, design: .rounded))
+                                    .frame(width: 29, height: 29)
+                                    .background(calendar.isDate(day, inSameDayAs: state.selectedDate) ? Color(hex: palette.accent) : Color.clear)
+                                    .foregroundStyle(calendar.isDate(day, inSameDayAs: state.selectedDate) ? Color(hex: palette.background) : Color(hex: palette.foreground))
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(calendar.isDateInToday(day) ? Color(hex: palette.accent) : .clear, lineWidth: 1))
+                            }.buttonStyle(SourcePressButtonStyle())
+                        } else { Color.clear.frame(height: 29) }
+                    }
+                }
+                Button("Today") { state.visibleMonth = Date(); state.selectedDate = Date() }.buttonStyle(QuickPopoverButtonStyle(palette: palette))
+            }.padding(16).frame(width: 295)
+            Rectangle().fill(Color(hex: palette.muted).opacity(0.22)).frame(width: 1).padding(.vertical, 12)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack { VStack(alignment: .leading, spacing: 2) { Text("TASKS").font(.caption2.weight(.bold)).tracking(1.2).foregroundStyle(Color(hex: palette.muted)); Text(state.selectedDate.formatted(date: .abbreviated, time: .omitted)).font(.headline) }; Spacer(); Text("\(model.configuration.todos.count)").font(.caption.monospacedDigit()).padding(6).background(Color(hex: palette.surface)).clipShape(Circle()) }
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 6) {
+                        ForEach(Array(model.configuration.todos.enumerated()), id: \.offset) { index, todo in
+                            HStack(spacing: 8) {
+                                Button { removeTodo(index) } label: { Image(systemName: "circle").foregroundStyle(Color(hex: palette.accent)) }.buttonStyle(SourcePressButtonStyle())
+                                Text(todo).font(.caption).lineLimit(2); Spacer()
+                            }.padding(9).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 10))
+                                .transition(.scale(scale: 0.94).combined(with: .opacity))
+                        }
+                    }
+                }
+                HStack(spacing: 7) {
+                    TextField("Add a task", text: $model.todoDraft).textFieldStyle(.plain).onSubmit { addTodo() }
+                    Button { addTodo() } label: { Image(systemName: "plus").frame(width: 25, height: 25).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(Circle()) }.buttonStyle(SourcePressButtonStyle())
+                }.padding(9).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 11))
+            }.padding(16).frame(maxWidth: .infinity)
+        }
+        .background(Color(hex: palette.background)).foregroundStyle(Color(hex: palette.foreground))
+        .background(OutsideClickDismissMonitor { model.statusPopoverWidgetID = nil; model.statusPopoverInteractionID = nil; model.statusPopoverDetail = "" })
+        .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.18), value: state.visibleMonth)
+        .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.16), value: model.configuration.todos)
+    }
+    private func moveMonth(_ amount: Int) { if let date = calendar.date(byAdding: .month, value: amount, to: state.visibleMonth) { state.visibleMonth = date } }
+    private func addTodo() { withAnimation(.easeOut(duration: 0.16)) { model.addTodo() } }
+    private func removeTodo(_ index: Int) { withAnimation(.easeOut(duration: 0.14)) { guard model.configuration.todos.indices.contains(index) else { return }; model.configuration.todos.remove(at: index) } }
 }
 
 private struct ResourceUsagePopover: View {
@@ -557,15 +637,17 @@ private struct StatusQuickPopover: View {
                 } else {
                     Image(systemName: icon).foregroundStyle(iconColor).frame(width: 26, height: 26).background(Color(hex: palette.surface)).clipShape(Circle())
                 }
-                Text(detail).font(.system(size: 15, weight: .semibold, design: .rounded)); Spacer()
+                Text(detail == "Wi-Fi" && controls.connectedSSID != "Not connected" ? "WI-FI · \(controls.connectedSSID)" : detail).font(.system(size: 15, weight: .semibold, design: .rounded)).lineLimit(1); Spacer()
             }
             Rectangle().fill(Color(hex: palette.muted).opacity(0.25)).frame(height: 1)
             if detail == "Wi-Fi" { wifiContent }
             else if detail == "Sound" { soundContent }
             else { batteryContent }
-            if !controls.operationMessage.isEmpty { Text(controls.operationMessage).font(.caption).foregroundStyle(Color(hex: palette.muted)).lineLimit(2) }
+            if !controls.operationMessage.isEmpty { Text(controls.operationMessage).font(.caption).foregroundStyle(Color(hex: palette.muted)).lineLimit(2).transition(.opacity) }
         }
         .padding(16).background(Color(hex: palette.background)).foregroundStyle(Color(hex: palette.foreground))
+        .background(OutsideClickDismissMonitor { model.statusPopoverWidgetID = nil; model.statusPopoverInteractionID = nil; model.statusPopoverDetail = "" })
+        .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.16), value: controls.operationMessage)
     }
     private var iconColor: Color {
         guard detail == "Battery" else { return Color(hex: palette.accent) }
@@ -578,7 +660,6 @@ private struct StatusQuickPopover: View {
                 Toggle("Wi-Fi", isOn: Binding(get: { controls.wifiEnabled }, set: controls.setWiFiEnabled)).toggleStyle(.switch).tint(Color(hex: palette.accent))
                 Spacer(); Button { controls.requestWiFiAccessAndScan() } label: { if controls.scanningWiFi { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.clockwise") } }.buttonStyle(.plain)
             }
-            Text(controls.connectedSSID).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             if controls.wifiNetworks.isEmpty && !controls.scanningWiFi {
                 Button("Allow Wi-Fi network listing…") { if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") { NSWorkspace.shared.open(url) } }.buttonStyle(QuickPopoverButtonStyle(palette: palette))
             }
@@ -588,12 +669,12 @@ private struct StatusQuickPopover: View {
                         VStack(spacing: 6) {
                             Button {
                                 model.selectedWiFiID = network.id; model.wifiPassword = ""
-                                if !network.secure { controls.connect(to: network, password: "") }
+                                if !network.secure || network.known { controls.connect(to: network) }
                             } label: {
-                                HStack { Image(systemName: "wifi"); Text(network.ssid).lineLimit(1); Spacer(); if network.secure { Image(systemName: "lock.fill").font(.caption) } }
+                                HStack { Image(systemName: "wifi"); Text(network.ssid).lineLimit(1); Spacer(); if network.known { Image(systemName: "checkmark.seal.fill").font(.caption).foregroundStyle(Color(hex: palette.success)) } else if network.secure { Image(systemName: "lock.fill").font(.caption) } }
                                     .padding(.horizontal, 10).frame(height: 34).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }.buttonStyle(SourcePressButtonStyle())
-                            if model.selectedWiFiID == network.id && network.secure {
+                            if model.selectedWiFiID == network.id && network.secure && !network.known {
                                 HStack { SecureField("Password", text: $model.wifiPassword).textFieldStyle(.plain).onSubmit { controls.connect(to: network, password: model.wifiPassword) }; Button("Connect") { controls.connect(to: network, password: model.wifiPassword) }.buttonStyle(QuickPopoverButtonStyle(palette: palette)) }
                                     .padding(9).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 10))
                             }
@@ -608,10 +689,17 @@ private struct StatusQuickPopover: View {
             HStack { Image(systemName: "speaker.wave.2.fill"); Slider(value: Binding(get: { controls.outputVolume }, set: controls.setOutputVolume), in: 0...100).tint(Color(hex: palette.accent)); Text("\(Int(controls.outputVolume))%").monospacedDigit().frame(width: 38) }
             HStack { Button("Mute") { controls.setMuted(true) }; Button("Unmute") { controls.setMuted(false) }; Spacer() }.buttonStyle(QuickPopoverButtonStyle(palette: palette))
             if !controls.audioDevices.isEmpty {
-                Picker("Output", selection: Binding(get: { controls.defaultAudioDevice }, set: controls.selectAudioDevice)) {
-                    ForEach(controls.audioDevices) { Text($0.name).tag($0.id) }
-                }.pickerStyle(.menu).tint(Color(hex: palette.accent))
-                    .padding(.horizontal, 10).frame(height: 34).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(spacing: 5) {
+                    ForEach(controls.audioDevices) { device in
+                        Button { controls.selectAudioDevice(device.id) } label: {
+                            HStack(spacing: 9) {
+                                Image(systemName: device.id == controls.defaultAudioDevice ? "checkmark.circle.fill" : "speaker.wave.2")
+                                    .foregroundStyle(device.id == controls.defaultAudioDevice ? Color(hex: palette.accent) : Color(hex: palette.muted))
+                                Text(device.name).lineLimit(1); Spacer()
+                            }.padding(.horizontal, 10).frame(height: 34).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 10))
+                        }.buttonStyle(SourcePressButtonStyle())
+                    }
+                }.transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }

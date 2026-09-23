@@ -7,6 +7,7 @@ final class SidePanelController {
     private var leftPanel: FloatingPanel?
     private var rightPanel: FloatingPanel?
     private var activityMonitor: Any?
+    private var outsideClickMonitor: Any?
     private var inactivityTask: DispatchWorkItem?
     init(model: AppModel) {
         self.model = model
@@ -15,14 +16,25 @@ final class SidePanelController {
         self.leftPanel = makePanel(side: .left)
         self.rightPanel = makePanel(side: .right)
         activityMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .keyDown, .scrollWheel]) { [weak self] event in
-            if self?.rightPanel?.isVisible == true { self?.resetControlsInactivityTimer() }
+            guard let self else { return event }
+            if self.rightPanel?.isVisible == true { self.resetControlsInactivityTimer() }
+            if event.type == .leftMouseDown || event.type == .rightMouseDown {
+                if let panel = self.rightPanel, panel.isVisible, event.window !== panel { self.dismiss(panel, side: .right) }
+                if let panel = self.leftPanel, panel.isVisible, event.window !== panel { self.dismiss(panel, side: .left) }
+            }
             return event
+        }
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self else { return }
+            if let panel = self.rightPanel, panel.isVisible { self.dismiss(panel, side: .right) }
+            if let panel = self.leftPanel, panel.isVisible { self.dismiss(panel, side: .left) }
         }
     }
 
     deinit {
         inactivityTask?.cancel()
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
+        if let outsideClickMonitor { NSEvent.removeMonitor(outsideClickMonitor) }
     }
 
     func toggleLeft() {
@@ -35,7 +47,7 @@ final class SidePanelController {
         if let leftPanel, leftPanel.isVisible { dismiss(leftPanel, side: .left) }
         if let rightPanel, rightPanel.isVisible && model.rightSidebarDetail == detail { dismiss(rightPanel, side: .right); return }
         model.rightSidebarDetail = detail
-        switch detail { case "Wi-Fi": model.controls.requestWiFiAccessAndScan(); case "Sound": model.controls.refreshAudioDevices(); case "Battery": model.controls.refreshPowerState(); default: model.controls.refreshAll() }
+        switch detail { case "Wi-Fi": model.controls.prepareWiFiMenu(); case "Sound": model.controls.prepareSoundMenu(); case "Battery": model.controls.operationMessage = ""; model.controls.refreshPowerState(); default: model.controls.operationMessage = ""; model.controls.refreshAll() }
         let panel = rightPanel ?? makePanel(side: .right)
         rightPanel = panel; present(panel, side: .right)
     }

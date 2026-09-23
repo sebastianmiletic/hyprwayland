@@ -37,6 +37,7 @@ final class DwindleTilingService: ObservableObject {
     private var animationTimer: Timer?
     private var animations: [CGWindowID: FrameAnimation] = [:]
     private var bar = BarConfiguration()
+    private var configuration = TilingConfiguration()
     private var originalWindows: [CGWindowID: OriginalWindow] = [:]
     private var windowOrder: [CGWindowID: Int] = [:]
     private var nextOrder = 0
@@ -59,6 +60,11 @@ final class DwindleTilingService: ObservableObject {
 
     func updateBarConfiguration(_ configuration: BarConfiguration) {
         bar = configuration
+        if enabled { tileVisibleApplications() }
+    }
+
+    func updateConfiguration(_ configuration: TilingConfiguration) {
+        self.configuration = configuration
         if enabled { tileVisibleApplications() }
     }
 
@@ -146,6 +152,7 @@ final class DwindleTilingService: ObservableObject {
                   let windowNumber = info[kCGWindowNumber] as? NSNumber else { continue }
             let pid = pidNumber.int32Value
             guard pid != ownPID, layer.intValue == 0, !seenPIDs.contains(pid), cgFrame.width >= 180, cgFrame.height >= 100 else { continue }
+            if let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, configuration.excludedBundleIdentifiers.contains(bundleID) { continue }
             guard let match = accessibleWindow(for: pid, closestTo: cgFrame), let screen = screen(containing: cgFrame) else { continue }
             seenPIDs.insert(pid)
             result.append(ManagedWindow(id: CGWindowID(windowNumber.uint32Value), pid: pid, element: match.element, frame: match.frame, screen: screen))
@@ -240,11 +247,12 @@ final class DwindleTilingService: ObservableObject {
     private func applyFrame(_ frame: CGRect, to element: AXUIElement) {
         var point = frame.origin; var size = frame.size
         guard let positionValue = AXValueCreate(.cgPoint, &point), let sizeValue = AXValueCreate(.cgSize, &size) else { return }
-        // Size and position are both written on every frame. Repeating size at
-        // the end handles applications that constrain dimensions after a move.
-        AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, sizeValue)
+        // Move before resizing so AppKit does not briefly grow the window from
+        // its old top edge. Reasserting position after size handles apps that
+        // apply minimum-size constraints without producing a visible jump.
         AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, positionValue)
         AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, sizeValue)
+        AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, positionValue)
     }
 
     private func frameDifference(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
@@ -325,14 +333,15 @@ final class DwindleTilingService: ObservableObject {
             let removed = max(0, barBottom - frame.minY)
             frame.origin.y += removed; frame.size.height -= removed
         }
-        return frame.insetBy(dx: 8, dy: 8)
+        let gap = max(0, min(configuration.outerGap, 40))
+        return frame.insetBy(dx: gap, dy: gap)
     }
 
     private func dwindleFrames(count: Int, in frame: CGRect) -> [CGRect] {
         guard count > 1 else { return [frame] }
         var result: [CGRect] = []
         var remainder = frame
-        let gap: CGFloat = 10
+        let gap = max(0, min(configuration.gap, 40))
         for index in 0..<count {
             let remaining = count - index
             if remaining == 1 { result.append(remainder); break }

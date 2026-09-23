@@ -193,9 +193,12 @@ final class AppModel: ObservableObject {
         $configuration.map(\.experimentalWorkspaceTransitions).removeDuplicates().dropFirst()
             .sink { [weak self] in self?.workspaces.experimentalTransitionsEnabled = $0 }.store(in: &cancellables)
         tiling.updateBarConfiguration(configuration.bar)
+        tiling.updateConfiguration(configuration.tiling)
         if configuration.tiling.enabled { tiling.setEnabled(true) }
         $configuration.map(\.tiling.enabled).removeDuplicates().dropFirst()
             .sink { [weak self] in self?.tiling.setEnabled($0) }.store(in: &cancellables)
+        $configuration.map(\.tiling).removeDuplicates().dropFirst()
+            .sink { [weak self] in self?.tiling.updateConfiguration($0) }.store(in: &cancellables)
         $configuration.map(\.bar).removeDuplicates().dropFirst()
             .sink { [weak self] in self?.tiling.updateBarConfiguration($0) }.store(in: &cancellables)
         if !configuration.hasCompletedOnboarding { selectedSection = .permissions }
@@ -412,6 +415,7 @@ final class AppModel: ObservableObject {
         down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
     }
     func openSystemSettings(_ pane: String = "") {
+        NSApp.keyWindow?.orderOut(nil)
         let target = pane.isEmpty ? "x-apple.systempreferences:" : "x-apple.systempreferences:com.apple.\(pane)"
         if let url = URL(string: target) { NSWorkspace.shared.open(url) }
     }

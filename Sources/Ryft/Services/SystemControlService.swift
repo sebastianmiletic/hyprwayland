@@ -11,6 +11,7 @@ struct WiFiNetworkInfo: Identifiable, Hashable {
     let ssid: String
     let signal: Int
     let secure: Bool
+    let known: Bool
     let network: CWNetwork
 }
 
@@ -57,7 +58,11 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         }, context)?.takeRetainedValue()
         if let powerSource { CFRunLoopAddSource(CFRunLoopGetMain(), powerSource, .commonModes) }
         observers.append(NotificationCenter.default.addObserver(forName: Notification.Name.NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in self?.refreshPowerState() })
-        workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.refreshPowerState() })
+        workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.refreshAll() })
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            guard let self, self.locationManager.authorizationStatus == .authorized || self.locationManager.authorizationStatus == .authorizedAlways else { return }
+            self.scanWiFi()
+        }
     }
     deinit {
         levelTimer?.invalidate(); powerTimer?.invalidate()
@@ -68,6 +73,17 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
 
     func refreshAll() {
         refreshWiFiState(); refreshAudioDevices(); refreshPowerState()
+    }
+
+    func prepareWiFiMenu() {
+        operationMessage = ""
+        refreshWiFiState()
+        if wifiNetworks.isEmpty { requestWiFiAccessAndScan() }
+    }
+
+    func prepareSoundMenu() {
+        operationMessage = ""
+        refreshAudioDevices()
     }
 
     func requestWiFiAccessAndScan() {
@@ -83,7 +99,7 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        if manager.authorizationStatus == .authorized { scanWiFi() }
+        if manager.authorizationStatus == .authorized || manager.authorizationStatus == .authorizedAlways { scanWiFi() }
     }
 
     func refreshWiFiState() {
@@ -104,9 +120,11 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let results = try interface.scanForNetworks(withSSID: nil)
+                let profiles = interface.configuration()?.networkProfiles.array as? [CWNetworkProfile] ?? []
+                let knownSSIDs = Set(profiles.compactMap(\.ssid))
                 let mapped = results.compactMap { network -> WiFiNetworkInfo? in
                     guard let ssid = network.ssid, !ssid.isEmpty else { return nil }
-                    return WiFiNetworkInfo(id: "\(ssid)-\(network.bssid ?? "")", ssid: ssid, signal: network.rssiValue, secure: !network.supportsSecurity(.none), network: network)
+                    return WiFiNetworkInfo(id: "\(ssid)-\(network.bssid ?? "")", ssid: ssid, signal: network.rssiValue, secure: !network.supportsSecurity(.none), known: knownSSIDs.contains(ssid), network: network)
                 }.sorted { $0.signal > $1.signal }
                 var seen = Set<String>()
                 let unique = mapped.filter { seen.insert($0.ssid).inserted }
@@ -115,13 +133,17 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         }
     }
 
-    func connect(to info: WiFiNetworkInfo, password: String) {
+    func connect(to info: WiFiNetworkInfo, password: String = "") {
         guard let interface = CWWiFiClient.shared().interface() else { return }
+        operationMessage = "Connecting to \(info.ssid)…"
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                try interface.associate(to: info.network, password: info.secure ? password : nil)
+                try interface.associate(to: info.network, password: (info.secure && !info.known) ? password : nil)
                 DispatchQueue.main.async { self.operationMessage = "Connected to \(info.ssid)"; self.refreshWiFiState() }
-            } catch { DispatchQueue.main.async { self.operationMessage = "Could not connect: \(error.localizedDescription)" } }
+            } catch { DispatchQueue.main.async {
+                let message = error.localizedDescription
+                self.operationMessage = message.localizedCaseInsensitiveContains("cancel") ? "" : "Could not connect: \(message)"
+            } }
         }
     }
 
@@ -212,7 +234,12 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
             return
         }
         operationMessage = enabled ? "Enabling Low Power Mode…" : "Disabling Low Power Mode…"
-        if let url = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension") { NSWorkspace.shared.open(url) }
+        if let pane = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension"),
+           let settings = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.systempreferences") {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = false; configuration.addsToRecentItems = false
+            NSWorkspace.shared.open([pane], withApplicationAt: settings, configuration: configuration)
+        }
         setLowPowerModeThroughSystemSettings(enabled, retries: 12)
     }
 
@@ -245,7 +272,10 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
                 guard role == (kAXMenuItemRole as String) else { return false }
                 return enabled ? title.localizedCaseInsensitiveContains("Always") : title.localizedCaseInsensitiveContains("Never")
             }
-            if let desired, AXUIElementPerformAction(desired, kAXPressAction as CFString) == .success { self.finishLowPowerModeChange(enabled) }
+            if let desired, AXUIElementPerformAction(desired, kAXPressAction as CFString) == .success {
+                app.hide()
+                self.finishLowPowerModeChange(enabled)
+            }
             else { self.retryLowPowerMode(enabled, retries: retries) }
         }
     }
@@ -282,7 +312,13 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         return value as? T
     }
 
-    private func runAppleScript(_ source: String) { var error: NSDictionary?; NSAppleScript(source: source)?.executeAndReturnError(&error); if let error { operationMessage = error[NSAppleScript.errorMessage] as? String ?? "Action failed" } }
+    private func runAppleScript(_ source: String) {
+        var error: NSDictionary?; NSAppleScript(source: source)?.executeAndReturnError(&error)
+        if let error {
+            let message = error[NSAppleScript.errorMessage] as? String ?? "Action failed"
+            operationMessage = message.localizedCaseInsensitiveContains("cancel") ? "" : message
+        }
+    }
     private func runProcess(_ path: String, _ arguments: [String], completion: @escaping (String) -> Void) {
         DispatchQueue.global(qos: .utility).async { let process = Process(); let pipe = Pipe(); process.executableURL = URL(fileURLWithPath: path); process.arguments = arguments; process.standardOutput = pipe; do { try process.run(); process.waitUntilExit(); completion(String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "") } catch { completion("") } }
     }

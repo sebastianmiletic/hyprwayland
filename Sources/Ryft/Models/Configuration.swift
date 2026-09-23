@@ -41,6 +41,9 @@ enum BuiltInBarStyle: String, CaseIterable, Identifiable {
 
 struct TilingConfiguration: Codable, Equatable {
     var enabled = false
+    var excludedBundleIdentifiers: [String] = []
+    var gap: Double = 10
+    var outerGap: Double = 8
 }
 
 struct NamedBarProfile: Codable, Equatable, Identifiable {

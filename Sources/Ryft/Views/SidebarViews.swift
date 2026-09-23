@@ -8,7 +8,7 @@ private struct SidebarShell<Content: View>: View {
     init(appearance: BarConfiguration, close: @escaping () -> Void, @ViewBuilder content: () -> Content) { self.appearance = appearance; self.close = close; self.content = content() }
     var body: some View {
         ZStack {
-            if appearance.panelBlurEnabled { RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.regularMaterial) }
+            if appearance.panelBlurEnabled { RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.regularMaterial).opacity(appearance.panelOpacity) }
             RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(hex: palette.background).opacity(appearance.panelOpacity))
                 .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: palette.muted).opacity(0.35)))
             content.padding(10)
@@ -149,8 +149,8 @@ struct RightSidebarView: View {
     }
     private var quickToggles: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 7) {
-            quick("Wi-Fi", icon: "wifi", subtitle: controls.connectedSSID) { model.rightSidebarDetail = "Wi-Fi"; controls.requestWiFiAccessAndScan() }
-            quick("Bluetooth", icon: "bluetooth", subtitle: "Devices") { model.openSystemSettings("Bluetooth") }
+            quick("Wi-Fi", icon: "wifi", subtitle: controls.connectedSSID) { model.rightSidebarDetail = "Wi-Fi"; controls.prepareWiFiMenu() }
+            quick("Bluetooth", icon: "antenna.radiowaves.left.and.right", subtitle: "Devices") { model.openSystemSettings("Bluetooth") }
             quick("Dark mode", icon: "moon.fill", subtitle: "Appearance") { model.toggleAppearance() }
             quick("Battery", icon: batterySymbol, subtitle: controls.lowPowerMode ? "Low Power Mode · \(controls.batteryPercent)" : controls.batteryPercent) { model.rightSidebarDetail = "Battery"; controls.refreshPowerState() }
         }
@@ -195,8 +195,7 @@ struct RightSidebarView: View {
     }
     private var wifiDetail: some View {
         VStack(spacing: 10) {
-            HStack { Toggle("Wi-Fi", isOn: Binding(get: { controls.wifiEnabled }, set: { controls.setWiFiEnabled($0) })); Spacer(); Button { controls.scanWiFi() } label: { if controls.scanningWiFi { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.clockwise") } }.buttonStyle(.plain) }
-            if controls.connectedSSID != "Not connected" { HStack { Label(controls.connectedSSID, systemImage: "checkmark.circle.fill"); Spacer(); Button("Disconnect") { controls.disconnectWiFi() } }.padding(10).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 12)) }
+            HStack { VStack(alignment: .leading, spacing: 2) { Text(controls.connectedSSID == "Not connected" ? "WI-FI" : "WI-FI · \(controls.connectedSSID)").font(.headline).lineLimit(1); Text(controls.wifiEnabled ? "Available networks" : "Wireless is off").font(.caption).foregroundStyle(Color(hex: palette.muted)) }; Spacer(); Toggle("", isOn: Binding(get: { controls.wifiEnabled }, set: { controls.setWiFiEnabled($0) })).labelsHidden(); Button { controls.scanWiFi() } label: { if controls.scanningWiFi { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.clockwise") } }.buttonStyle(.plain) }
             ScrollView {
                 LazyVStack(spacing: 5) {
                     ForEach(controls.wifiNetworks) { network in
@@ -204,11 +203,11 @@ struct RightSidebarView: View {
                             Button {
                                 model.selectedWiFiID = network.id
                                 model.wifiPassword = ""
-                                if !network.secure { controls.connect(to: network, password: "") }
+                                if !network.secure || network.known { controls.connect(to: network) }
                             } label: {
-                                HStack { Image(systemName: signalIcon(network.signal)); Text(network.ssid).lineLimit(1); Spacer(); if network.secure { Image(systemName: "lock.fill").font(.caption) }; Text("\(network.signal) dBm").font(.caption).foregroundStyle(Color(hex: palette.muted)) }
+                                HStack { Image(systemName: signalIcon(network.signal)); Text(network.ssid).lineLimit(1); Spacer(); if network.known { Text("Saved").font(.caption2.weight(.semibold)).foregroundStyle(Color(hex: palette.success)); Image(systemName: "checkmark.seal.fill").font(.caption).foregroundStyle(Color(hex: palette.success)) } else if network.secure { Image(systemName: "lock.fill").font(.caption) }; Text("\(network.signal) dBm").font(.caption).foregroundStyle(Color(hex: palette.muted)) }
                             }.buttonStyle(.plain)
-                            if model.selectedWiFiID == network.id && network.secure {
+                            if model.selectedWiFiID == network.id && network.secure && !network.known {
                                 HStack { SecureField("Password", text: $model.wifiPassword).textFieldStyle(.plain).onSubmit { controls.connect(to: network, password: model.wifiPassword) }; Button("Connect") { controls.connect(to: network, password: model.wifiPassword) }.buttonStyle(.borderedProminent) }
                                     .padding(9).background(Color(hex: palette.background)).clipShape(RoundedRectangle(cornerRadius: 10))
                             }
@@ -237,8 +236,7 @@ struct RightSidebarView: View {
             Text(controls.batteryPercent).font(.system(size: 34, weight: .semibold, design: .rounded))
             Toggle("Low Power Mode", isOn: Binding(get: { controls.lowPowerMode }, set: { controls.setLowPowerMode($0) }))
                 .padding(14).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 14))
-            Text("macOS requires administrator approval when changing Low Power Mode. Ryft uses pmset and shows the standard system authorization prompt.").font(.caption).foregroundStyle(Color(hex: palette.muted)).multilineTextAlignment(.center)
-            Button("Open Battery Settings") { model.openSystemSettings("Battery-Settings.extension") }.buttonStyle(.bordered)
+            Text("Changes Low Power Mode without requesting an administrator password.").font(.caption).foregroundStyle(Color(hex: palette.muted)).multilineTextAlignment(.center)
             Spacer()
         }.padding(.top, 30)
     }

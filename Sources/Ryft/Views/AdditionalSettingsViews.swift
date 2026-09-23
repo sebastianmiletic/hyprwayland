@@ -330,6 +330,7 @@ struct GeneralSettingsView: View {
     }
 
     private func openPrivacyPane(_ pane: String) {
+        NSApp.keyWindow?.orderOut(nil)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") { NSWorkspace.shared.open(url) }
     }
 }
