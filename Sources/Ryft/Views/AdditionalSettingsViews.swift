@@ -135,7 +135,7 @@ struct WallpaperGalleryView: View {
     }
     private var homeView: some View {
         ZStack(alignment: .bottomLeading) {
-            if !model.configuration.currentWallpaper.isEmpty, let image = NSImage(contentsOfFile: model.configuration.currentWallpaper) { Image(nsImage: image).resizable().scaledToFill() }
+            if !model.configuration.currentWallpaper.isEmpty { WallpaperHomeThumbnail(url: URL(fileURLWithPath: model.configuration.currentWallpaper)) }
             else { Color(hex: palette.surface) }
             LinearGradient(colors: [.clear, .black.opacity(0.78)], startPoint: .center, endPoint: .bottom)
             Text("\(model.wallpapers.count) wallpapers  •  \(model.configuration.favoriteWallpapers.count) favorites")
@@ -177,14 +177,25 @@ struct WallpaperGalleryView: View {
     }
 }
 
+private struct WallpaperHomeThumbnail: View {
+    @StateObject private var thumbnail: WallpaperThumbnailLoader
+    init(url: URL) { _thumbnail = StateObject(wrappedValue: WallpaperThumbnailLoader(url: url, size: CGSize(width: 1100, height: 640))) }
+    var body: some View {
+        Group {
+            if let image = thumbnail.image { Image(nsImage: image).resizable().scaledToFill() }
+            else { Color.clear }
+        }
+    }
+}
+
 private struct WallpaperCategoryChip: View {
     @ObservedObject var model: AppModel
     let name: String
     let preview: URL?
-    @ObservedObject private var thumbnail: WallpaperThumbnailLoader
+    @StateObject private var thumbnail: WallpaperThumbnailLoader
     init(model: AppModel, name: String, preview: URL?) {
         self.model = model; self.name = name; self.preview = preview
-        self.thumbnail = WallpaperThumbnailLoader(url: preview ?? URL(fileURLWithPath: "/dev/null"), size: CGSize(width: 150, height: 60))
+        _thumbnail = StateObject(wrappedValue: WallpaperThumbnailLoader(url: preview ?? URL(fileURLWithPath: "/dev/null"), size: CGSize(width: 150, height: 60)))
     }
     var body: some View {
         Button { model.wallpaperCategory = name; model.wallpaperSelectionIndex = 0 } label: {
@@ -202,8 +213,8 @@ private struct WallpaperTile: View {
     @ObservedObject var model: AppModel
     let url: URL
     let selected: Bool
-    @ObservedObject private var thumbnail: WallpaperThumbnailLoader
-    init(model: AppModel, url: URL, selected: Bool = false) { self.model = model; self.url = url; self.selected = selected; self.thumbnail = WallpaperThumbnailLoader(url: url) }
+    @StateObject private var thumbnail: WallpaperThumbnailLoader
+    init(model: AppModel, url: URL, selected: Bool = false) { self.model = model; self.url = url; self.selected = selected; _thumbnail = StateObject(wrappedValue: WallpaperThumbnailLoader(url: url)) }
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Button { model.setWallpaper(url) } label: {

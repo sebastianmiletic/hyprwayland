@@ -374,11 +374,14 @@ private struct ResourceUsagePopover: View {
                 Text("Collecting application usage…").font(.caption).foregroundStyle(Color(hex: palette.muted)).frame(maxWidth: .infinity, minHeight: 80)
             } else {
                 VStack(spacing: 5) {
-                    HStack { Text("APPLICATION"); Spacer(); Text("CPU").frame(width: 46, alignment: .trailing); Text("RAM").frame(width: 46, alignment: .trailing) }
+                    HStack { Text("APPLICATION"); Spacer(); Text("CPU").frame(width: 52, alignment: .trailing); Text("RAM").frame(width: 72, alignment: .trailing) }
                         .font(.system(size: 9, weight: .bold, design: .rounded)).foregroundStyle(Color(hex: palette.muted)).padding(.horizontal, 7)
                     ForEach(Array(system.appUsage.prefix(8))) { app in
                         HStack(spacing: 9) {
-                            Text(String(app.name.prefix(1)).uppercased()).font(.caption.bold()).frame(width: 26, height: 26).background(Color(hex: palette.accent).opacity(0.18)).foregroundStyle(Color(hex: palette.accent)).clipShape(RoundedRectangle(cornerRadius: 8))
+                            Group {
+                                if let icon = system.icon(for: app) { Image(nsImage: icon).resizable().scaledToFit() }
+                                else { Text(String(app.name.prefix(1)).uppercased()).font(.caption.bold()).foregroundStyle(Color(hex: palette.accent)) }
+                            }.frame(width: 28, height: 28).background(Color(hex: palette.accent).opacity(0.12)).clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(app.name).font(.caption.weight(.semibold)).lineLimit(1)
                                 GeometryReader { proxy in
@@ -388,8 +391,11 @@ private struct ResourceUsagePopover: View {
                                     }
                                 }.frame(height: 3).background(Color(hex: palette.muted).opacity(0.18)).clipShape(Capsule())
                             }
-                            Text(String(format: "%.1f%%", app.cpu)).font(.caption2.monospacedDigit()).frame(width: 46, alignment: .trailing)
-                            Text(String(format: "%.1f%%", app.memory)).font(.caption2.monospacedDigit()).frame(width: 46, alignment: .trailing).foregroundStyle(Color(hex: palette.muted))
+                            Text(String(format: "%.1f%%", app.cpu)).font(.caption2.monospacedDigit()).frame(width: 52, alignment: .trailing)
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(ByteCountFormatter.string(fromByteCount: app.memoryBytes, countStyle: .memory)).font(.caption2.monospacedDigit())
+                                Text(String(format: "%.1f%%", app.memory)).font(.system(size: 9, design: .monospaced)).foregroundStyle(Color(hex: palette.muted))
+                            }.frame(width: 72, alignment: .trailing)
                         }.padding(.horizontal, 7).frame(height: 39).background(Color(hex: palette.surface).opacity(0.62)).clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                 }
@@ -400,6 +406,46 @@ private struct ResourceUsagePopover: View {
     }
     private func summary(_ title: String, _ value: String, _ icon: String) -> some View {
         HStack(spacing: 8) { Image(systemName: icon).foregroundStyle(Color(hex: palette.accent)); VStack(alignment: .leading, spacing: 1) { Text(title).font(.caption2).foregroundStyle(Color(hex: palette.muted)); Text(value).font(.headline.monospacedDigit()) }; Spacer() }.padding(10).frame(maxWidth: .infinity).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 11))
+    }
+}
+
+private struct OutsideClickDismissMonitor: NSViewRepresentable {
+    let dismiss: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(dismiss: dismiss) }
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { context.coordinator.install(for: view.window) }
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.dismiss = dismiss
+        DispatchQueue.main.async { context.coordinator.install(for: view.window) }
+    }
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { coordinator.remove() }
+
+    final class Coordinator {
+        var dismiss: () -> Void
+        weak var hostWindow: NSWindow?
+        private var localMonitor: Any?
+        private var globalMonitor: Any?
+        init(dismiss: @escaping () -> Void) { self.dismiss = dismiss }
+        func install(for window: NSWindow?) {
+            guard let window, hostWindow !== window else { return }
+            remove(); hostWindow = window
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+                if event.window !== self?.hostWindow { DispatchQueue.main.async { self?.dismiss() } }
+                return event
+            }
+            globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                DispatchQueue.main.async { self?.dismiss() }
+            }
+        }
+        func remove() {
+            if let localMonitor { NSEvent.removeMonitor(localMonitor); self.localMonitor = nil }
+            if let globalMonitor { NSEvent.removeMonitor(globalMonitor); self.globalMonitor = nil }
+            hostWindow = nil
+        }
     }
 }
 
@@ -433,6 +479,7 @@ private struct WallpaperBarPopover: View {
         .padding(12)
         .background(LinearGradient(colors: [Color(hex: palette.background), Color(hex: palette.surface).opacity(0.9)], startPoint: .topLeading, endPoint: .bottomTrailing))
         .foregroundStyle(Color(hex: palette.foreground)).clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(OutsideClickDismissMonitor { model.statusPopoverWidgetID = nil; model.statusPopoverInteractionID = nil; model.statusPopoverDetail = "" })
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(hex: palette.muted).opacity(0.3)))
         .onAppear { model.wallpaperSelectionIndex = max(0, choices.firstIndex { $0.path == model.configuration.currentWallpaper } ?? 0); model.wallpaperFocusArea = 0; model.wallpaperApplySelection = 0 }
     }
@@ -452,8 +499,8 @@ private struct WallpaperBarCard: View {
     let url: URL
     let selected: Bool
     let action: () -> Void
-    @ObservedObject private var thumbnail: WallpaperThumbnailLoader
-    init(url: URL, selected: Bool, action: @escaping () -> Void) { self.url = url; self.selected = selected; self.action = action; self.thumbnail = WallpaperThumbnailLoader(url: url, size: CGSize(width: 180, height: 110)) }
+    @StateObject private var thumbnail: WallpaperThumbnailLoader
+    init(url: URL, selected: Bool, action: @escaping () -> Void) { self.url = url; self.selected = selected; self.action = action; _thumbnail = StateObject(wrappedValue: WallpaperThumbnailLoader(url: url, size: CGSize(width: 180, height: 110))) }
     var body: some View {
         Button(action: action) {
             ZStack(alignment: .bottomLeading) {

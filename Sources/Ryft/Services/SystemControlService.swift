@@ -4,6 +4,7 @@ import CoreAudio
 import CoreLocation
 import CoreWLAN
 import IOKit.ps
+import ApplicationServices
 
 struct WiFiNetworkInfo: Identifiable, Hashable {
     let id: String
@@ -204,18 +205,81 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     }
 
     func setLowPowerMode(_ enabled: Bool) {
-        let command = "/usr/bin/pmset -a lowpowermode \(enabled ? 1 : 0)"
-        let escaped = command.replacingOccurrences(of: "\"", with: "\\\"")
-        let source = "do shell script \"\(escaped)\" with administrator privileges"
-        DispatchQueue.global(qos: .userInitiated).async {
-            let appleScript = NSAppleScript(source: source); var error: NSDictionary?
-            appleScript?.executeAndReturnError(&error)
-            DispatchQueue.main.async {
-                if let error { self.operationMessage = error[NSAppleScript.errorMessage] as? String ?? "Low Power Mode was not changed" }
-                else { self.lowPowerMode = enabled; self.operationMessage = enabled ? "Low Power Mode enabled" : "Low Power Mode disabled" }
-                self.refreshPowerState()
-            }
+        guard enabled != lowPowerMode else { return }
+        guard AXIsProcessTrusted() else {
+            operationMessage = "Accessibility is needed to change Low Power Mode without a password."
+            WorkspaceController.requestAccessibility()
+            return
         }
+        operationMessage = enabled ? "Enabling Low Power Mode…" : "Disabling Low Power Mode…"
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension") { NSWorkspace.shared.open(url) }
+        setLowPowerModeThroughSystemSettings(enabled, retries: 12)
+    }
+
+    private func setLowPowerModeThroughSystemSettings(_ enabled: Bool, retries: Int) {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences").first else {
+            retryLowPowerMode(enabled, retries: retries); return
+        }
+        let root = AXUIElementCreateApplication(app.processIdentifier)
+        let elements = accessibilityDescendants(of: root)
+        let popup = elements.first { element in
+            let role: String? = axAttribute(element, kAXRoleAttribute as CFString)
+            guard role == (kAXPopUpButtonRole as String) || role == "AXMenuButton" else { return false }
+            let value: String = axAttribute(element, kAXValueAttribute as CFString) ?? ""
+            let title: String = axAttribute(element, kAXTitleAttribute as CFString) ?? ""
+            let description: String = axAttribute(element, kAXDescriptionAttribute as CFString) ?? ""
+            let combined = "\(value) \(title) \(description)".lowercased()
+            return combined.contains("low power") || combined == "never  " || combined.contains("only on battery") || combined == "always  "
+        }
+        guard let popup else { retryLowPowerMode(enabled, retries: retries); return }
+
+        guard AXUIElementPerformAction(popup, kAXPressAction as CFString) == .success else {
+            retryLowPowerMode(enabled, retries: retries); return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+            guard let self else { return }
+            let menuItems = self.accessibilityDescendants(of: root)
+            let desired = menuItems.first { element in
+                let role: String? = self.axAttribute(element, kAXRoleAttribute as CFString)
+                let title: String = self.axAttribute(element, kAXTitleAttribute as CFString) ?? ""
+                guard role == (kAXMenuItemRole as String) else { return false }
+                return enabled ? title.localizedCaseInsensitiveContains("Always") : title.localizedCaseInsensitiveContains("Never")
+            }
+            if let desired, AXUIElementPerformAction(desired, kAXPressAction as CFString) == .success { self.finishLowPowerModeChange(enabled) }
+            else { self.retryLowPowerMode(enabled, retries: retries) }
+        }
+    }
+
+    private func retryLowPowerMode(_ enabled: Bool, retries: Int) {
+        guard retries > 0 else {
+            operationMessage = "Battery Settings is open. Choose Low Power Mode there; Ryft will never request your password."
+            refreshPowerState(); return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.setLowPowerModeThroughSystemSettings(enabled, retries: retries - 1) }
+    }
+
+    private func finishLowPowerModeChange(_ enabled: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            guard let self else { return }
+            self.refreshPowerState()
+            if self.lowPowerMode == enabled { self.operationMessage = enabled ? "Low Power Mode enabled without authentication" : "Low Power Mode disabled without authentication" }
+            else { self.operationMessage = "Battery Settings is open. Choose Low Power Mode there; Ryft will never request your password." }
+        }
+    }
+
+    private func accessibilityDescendants(of root: AXUIElement, limit: Int = 1200) -> [AXUIElement] {
+        var result: [AXUIElement] = []; var queue: [AXUIElement] = [root]; var index = 0
+        while index < queue.count, result.count < limit {
+            let element = queue[index]; index += 1; result.append(element)
+            if let children: [AXUIElement] = axAttribute(element, kAXChildrenAttribute as CFString) { queue.append(contentsOf: children) }
+        }
+        return result
+    }
+
+    private func axAttribute<T>(_ element: AXUIElement, _ attribute: CFString) -> T? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
+        return value as? T
     }
 
     private func runAppleScript(_ source: String) { var error: NSDictionary?; NSAppleScript(source: source)?.executeAndReturnError(&error); if let error { operationMessage = error[NSAppleScript.errorMessage] as? String ?? "Action failed" } }

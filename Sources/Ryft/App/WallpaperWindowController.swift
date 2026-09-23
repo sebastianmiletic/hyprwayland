@@ -48,7 +48,7 @@ final class WallpaperWindowController {
         window.backgroundColor = .clear; window.isOpaque = false; window.hasShadow = true
         window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        window.hidesOnDeactivate = false; window.isReleasedWhenClosed = false
+        window.hidesOnDeactivate = true; window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: view)
         window.onCancel = { [weak self] in self?.hide() }
         window.center()
