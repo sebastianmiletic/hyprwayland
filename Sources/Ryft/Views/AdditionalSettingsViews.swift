@@ -287,6 +287,7 @@ struct GeneralSettingsView: View {
             Text("A red dot beside General remains visible while any permission needs attention. Select Review to open the matching macOS control.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+        QuickStartSettingsView(model: model, embedded: true)
         SettingsGroup("Startup") {
             Toggle("Launch Ryft at login", isOn: Binding(get: { model.configuration.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
             Text("Login registration works after Ryft is installed as an application bundle.").font(.caption).foregroundStyle(.secondary)

@@ -82,11 +82,12 @@ struct PermissionsSettingsView: View {
 
 struct QuickStartSettingsView: View {
     @ObservedObject var model: AppModel
+    var embedded = false
     private var palette: ThemePalette { model.configuration.bar.palette }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            if !model.configuration.hasCompletedOnboarding {
+            if !model.configuration.hasCompletedOnboarding && !embedded {
                 Label("Step 2 of 2", systemImage: "sparkles").font(.caption.weight(.semibold)).foregroundStyle(Color(hex: palette.accent))
                 Text("Your desktop is ready").font(.title2.bold())
                 Text("Four controls cover the everyday Ryft workflow. You can replay this guide from Settings at any time.").foregroundStyle(.secondary)
@@ -115,9 +116,9 @@ struct QuickStartSettingsView: View {
             }
             if !model.configuration.hasCompletedOnboarding {
                 HStack {
-                    Button("Back") { model.selectedSection = .permissions }.buttonStyle(SettingsHoverButtonStyle())
+                    if !embedded { Button("Back") { model.selectedSection = .permissions }.buttonStyle(SettingsHoverButtonStyle()) }
                     Spacer()
-                    Button("Finish Setup") { model.configuration.hasCompletedOnboarding = true; model.selectedSection = .home }.buttonStyle(.borderedProminent)
+                    Button("Finish Setup") { model.configuration.hasCompletedOnboarding = true; model.selectedSection = embedded ? .general : .home }.buttonStyle(.borderedProminent)
                 }
             }
         }

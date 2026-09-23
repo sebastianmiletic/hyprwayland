@@ -201,7 +201,7 @@ final class AppModel: ObservableObject {
             .sink { [weak self] in self?.tiling.updateConfiguration($0) }.store(in: &cancellables)
         $configuration.map(\.bar).removeDuplicates().dropFirst()
             .sink { [weak self] in self?.tiling.updateBarConfiguration($0) }.store(in: &cancellables)
-        if !configuration.hasCompletedOnboarding { selectedSection = .permissions }
+        if !configuration.hasCompletedOnboarding { selectedSection = .general }
         refreshWallpapers()
         save()
     }

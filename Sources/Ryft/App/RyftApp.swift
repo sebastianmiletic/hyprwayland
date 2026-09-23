@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.captureSettingsWindow()
             if !model.configuration.hasCompletedOnboarding {
-                model.selectedSection = .permissions
+                model.selectedSection = .general
                 if self.settingsWindow?.isVisible != true { self.showSettings() }
             }
         }
@@ -76,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let settingsWindow, !settingsAnimationInProgress else { return }
         if settingsWindow.isVisible { hideSettings(); return }
         if AppModel.shared.configuration.hasCompletedOnboarding { AppModel.shared.selectedSection = .home }
-        else { AppModel.shared.selectedSection = .permissions }
+        else { AppModel.shared.selectedSection = .general }
         NSApp.activate(ignoringOtherApps: true)
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             settingsWindow.alphaValue = 1; settingsWindow.makeKeyAndOrderFront(nil); settingsWindow.orderFrontRegardless()

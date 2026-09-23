@@ -3,6 +3,14 @@ import UniformTypeIdentifiers
 import Darwin
 
 private final class SettingsHoverState: ObservableObject { @Published var hovered = false }
+private final class SettingsNavigationState: ObservableObject { @Published var visibility: NavigationSplitViewVisibility = .all }
+
+private extension View {
+    @ViewBuilder func hidingSystemSidebarToggle() -> some View {
+        if #available(macOS 14.0, *) { self.toolbar(removing: .sidebarToggle) }
+        else { self }
+    }
+}
 
 struct SettingsHoverButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> Body { Body(configuration: configuration) }
@@ -23,6 +31,7 @@ struct SettingsHoverButtonStyle: ButtonStyle {
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var notifications: NotificationDaemon
+    @StateObject private var navigation = SettingsNavigationState()
 
     init(model: AppModel) {
         self.model = model
@@ -34,15 +43,15 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $navigation.visibility) {
             VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 9) {
-                    ZStack { RoundedRectangle(cornerRadius: 8).fill(Color(hex: model.configuration.bar.palette.accent)); Image(systemName: "sparkle").font(.system(size: 16, weight: .bold)).foregroundStyle(Color(hex: model.configuration.bar.palette.background)) }
-                        .frame(width: 30, height: 30)
-                    Text("Ryft").font(.system(size: 19, weight: .bold, design: .rounded))
-                }.padding(.horizontal, 12).padding(.bottom, 12)
+                HStack {
+                    Spacer()
+                    Button { navigation.visibility = .detailOnly } label: { Image(systemName: "sidebar.left").frame(width: 28, height: 28) }
+                        .buttonStyle(SettingsHoverButtonStyle()).help("Hide sidebar")
+                }.padding(.horizontal, 4).padding(.bottom, 5)
                 ForEach(AppSection.allCases.filter { section in
-                    section != .home && (!model.configuration.hasCompletedOnboarding || (section != .permissions && section != .guide))
+                    section != .home && section != .permissions && section != .guide
                 }) { section in
                     Button { model.selectedSection = section } label: {
                         HStack(spacing: 10) {
@@ -83,7 +92,14 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
             }.background(Color.primary.opacity(0.018))
+                .overlay(alignment: .topLeading) {
+                    if navigation.visibility == .detailOnly {
+                        Button { navigation.visibility = .all } label: { Image(systemName: "sidebar.left").frame(width: 30, height: 30) }
+                            .buttonStyle(SettingsHoverButtonStyle()).help("Show sidebar").padding(8)
+                    }
+                }
         }
+        .hidingSystemSidebarToggle()
         .background(.regularMaterial)
         .frame(minWidth: 820, minHeight: 560)
         .onAppear { notifications.refreshAuthorization() }
