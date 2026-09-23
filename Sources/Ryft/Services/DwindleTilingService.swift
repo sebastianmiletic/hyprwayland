@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Combine
+import QuartzCore
 
 /// Ryft-owned automatic Dwindle tiling. The engine intentionally manages one
 /// standard window per visible application and remains idle until two distinct
@@ -23,8 +24,18 @@ final class DwindleTilingService: ObservableObject {
         let element: AXUIElement
     }
 
+    private struct FrameAnimation {
+        let element: AXUIElement
+        let from: CGRect
+        let to: CGRect
+        let startedAt: CFTimeInterval
+        let duration: CFTimeInterval
+    }
+
     private var enabled = false
     private var timer: Timer?
+    private var animationTimer: Timer?
+    private var animations: [CGWindowID: FrameAnimation] = [:]
     private var bar = BarConfiguration()
     private var originalWindows: [CGWindowID: OriginalWindow] = [:]
     private var windowOrder: [CGWindowID: Int] = [:]
@@ -38,7 +49,7 @@ final class DwindleTilingService: ObservableObject {
             startTimer()
             tileVisibleApplications()
         } else {
-            restoreVisibleWindows()
+            restoreManagedWindows(animated: true)
             timer?.invalidate(); timer = nil
             running = false
             managedApplicationCount = 0
@@ -58,8 +69,10 @@ final class DwindleTilingService: ObservableObject {
 
     func shutdown() {
         guard enabled else { return }
-        restoreVisibleWindows()
+        restoreManagedWindows(animated: false)
         timer?.invalidate(); timer = nil
+        animationTimer?.invalidate(); animationTimer = nil
+        animations.removeAll()
         enabled = false
     }
 
@@ -96,7 +109,7 @@ final class DwindleTilingService: ObservableObject {
             let frames = dwindleFrames(count: ordered.count, in: availableFrame(for: screen))
             for (window, target) in zip(ordered, frames) {
                 if originalWindows[window.id] == nil { originalWindows[window.id] = OriginalWindow(frame: window.frame, element: window.element) }
-                setFrame(target, for: window.element)
+                setFrame(target, for: window.element, id: window.id)
                 tiledIDs.insert(window.id)
             }
         }
@@ -155,7 +168,7 @@ final class DwindleTilingService: ObservableObject {
             let distance = abs(frame.minX - target.minX) + abs(frame.minY - target.minY) + abs(frame.width - target.width) + abs(frame.height - target.height)
             if best == nil || distance < best!.2 { best = (window, frame, distance) }
         }
-        guard let best, best.2 < 180 else { return nil }
+        guard let best else { return nil }
         return (best.0, best.1)
     }
 
@@ -178,15 +191,59 @@ final class DwindleTilingService: ObservableObject {
         return value as? T
     }
 
-    private func setFrame(_ frame: CGRect, for element: AXUIElement) {
-        guard let current = self.frame(of: element), frameDifference(current, frame) > 2 else { return }
+    private func setFrame(_ target: CGRect, for element: AXUIElement, id: CGWindowID, animated: Bool = true) {
+        if animated, let animation = animations[id], frameDifference(animation.to, target) < 1 { return }
+        guard let current = frame(of: element), frameDifference(current, target) > 1 else {
+            animations.removeValue(forKey: id)
+            return
+        }
+        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            animations.removeValue(forKey: id)
+            applyFrame(target, to: element)
+            return
+        }
+        animations[id] = FrameAnimation(element: element, from: current, to: target, startedAt: CACurrentMediaTime(), duration: 0.22)
+        startAnimationTimerIfNeeded()
+    }
+
+    private func startAnimationTimerIfNeeded() {
+        guard animationTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in self?.advanceAnimations() }
+        RunLoop.main.add(timer, forMode: .common)
+        animationTimer = timer
+    }
+
+    private func advanceAnimations() {
+        let now = CACurrentMediaTime()
+        var completed: [CGWindowID] = []
+        for (id, animation) in animations {
+            let progress = min(1, max(0, (now - animation.startedAt) / animation.duration))
+            let eased = 1 - pow(1 - progress, 4) // ease-out-quart
+            let frame = interpolate(from: animation.from, to: animation.to, progress: CGFloat(eased))
+            applyFrame(frame, to: animation.element)
+            if progress >= 1 { completed.append(id) }
+        }
+        for id in completed { animations.removeValue(forKey: id) }
+        if animations.isEmpty { animationTimer?.invalidate(); animationTimer = nil }
+    }
+
+    private func interpolate(from: CGRect, to: CGRect, progress: CGFloat) -> CGRect {
+        CGRect(
+            x: from.minX + (to.minX - from.minX) * progress,
+            y: from.minY + (to.minY - from.minY) * progress,
+            width: from.width + (to.width - from.width) * progress,
+            height: from.height + (to.height - from.height) * progress
+        )
+    }
+
+    private func applyFrame(_ frame: CGRect, to element: AXUIElement) {
         var point = frame.origin; var size = frame.size
         guard let positionValue = AXValueCreate(.cgPoint, &point), let sizeValue = AXValueCreate(.cgSize, &size) else { return }
-        // Some applications constrain size based on their current position.
-        // Position, size, then position once more gives those apps a stable fit.
-        AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, positionValue)
+        // Size and position are both written on every frame. Repeating size at
+        // the end handles applications that constrain dimensions after a move.
         AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, sizeValue)
         AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, positionValue)
+        AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, sizeValue)
     }
 
     private func frameDifference(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
@@ -196,12 +253,12 @@ final class DwindleTilingService: ObservableObject {
     private func restore(_ windows: [ManagedWindow]) {
         for window in windows {
             guard let original = originalWindows.removeValue(forKey: window.id) else { continue }
-            setFrame(original.frame, for: original.element)
+            setFrame(original.frame, for: original.element, id: window.id)
         }
     }
 
-    private func restoreVisibleWindows() {
-        for original in originalWindows.values { setFrame(original.frame, for: original.element) }
+    private func restoreManagedWindows(animated: Bool) {
+        for (id, original) in originalWindows { setFrame(original.frame, for: original.element, id: id, animated: animated) }
         originalWindows.removeAll()
         windowOrder.removeAll()
     }
