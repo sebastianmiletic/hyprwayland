@@ -43,7 +43,7 @@ struct PermissionsSettingsView: View {
             }
             if !model.configuration.hasCompletedOnboarding {
                 HStack {
-                    Button("Skip for now") { model.configuration.hasCompletedOnboarding = true; model.selectedSection = .home }.buttonStyle(.plain)
+                    Button("Skip for now") { model.configuration.hasCompletedOnboarding = true; model.selectedSection = .home }.buttonStyle(SettingsHoverButtonStyle())
                     Spacer()
                     Button("Continue to Quick Start") { model.selectedSection = .guide }.buttonStyle(.borderedProminent)
                 }
@@ -115,7 +115,7 @@ struct QuickStartSettingsView: View {
             }
             if !model.configuration.hasCompletedOnboarding {
                 HStack {
-                    Button("Back") { model.selectedSection = .permissions }.buttonStyle(.plain)
+                    Button("Back") { model.selectedSection = .permissions }.buttonStyle(SettingsHoverButtonStyle())
                     Spacer()
                     Button("Finish Setup") { model.configuration.hasCompletedOnboarding = true; model.selectedSection = .home }.buttonStyle(.borderedProminent)
                 }
@@ -132,6 +132,6 @@ struct QuickStartSettingsView: View {
                 if !shortcut.isEmpty { Text(shortcut).font(.system(.caption, design: .monospaced).weight(.semibold)).padding(.horizontal, 8).padding(.vertical, 5).background(Color.primary.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 6)) }
                 Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
             }.contentShape(Rectangle()).padding(.vertical, 3)
-        }.buttonStyle(.plain)
+        }.buttonStyle(SettingsHoverButtonStyle())
     }
 }

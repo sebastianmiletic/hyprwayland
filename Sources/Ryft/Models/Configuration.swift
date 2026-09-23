@@ -151,10 +151,11 @@ struct BarConfiguration: Codable, Equatable {
     var displayCornerRadius: Double = 18
     var manualNotchWidth: Double = 0
     var workspaceCount = 5
+    var showWorkspaceAppIcons = false
     var palette: ThemePalette = .sebastian
     var widgets: [WidgetConfiguration] = WidgetConfiguration.defaults
 
-    enum CodingKeys: String, CodingKey { case enabled, height, horizontalInset, outerInset, itemSpacing, cornerRadius, opacity, showBackground, sourceExact, blurEnabled, blurStyle, panelBlurEnabled, panelOpacity, position, floating, connectedPanel, showOnAllDisplays, reserveNotchSpace, splitAroundNotch, notchMaskEnabled, notchMaskHeight, notchShelfCornerRadius, roundBottomDisplayCorners, displayCornerRadius, manualNotchWidth, workspaceCount, palette, widgets }
+    enum CodingKeys: String, CodingKey { case enabled, height, horizontalInset, outerInset, itemSpacing, cornerRadius, opacity, showBackground, sourceExact, blurEnabled, blurStyle, panelBlurEnabled, panelOpacity, position, floating, connectedPanel, showOnAllDisplays, reserveNotchSpace, splitAroundNotch, notchMaskEnabled, notchMaskHeight, notchShelfCornerRadius, roundBottomDisplayCorners, displayCornerRadius, manualNotchWidth, workspaceCount, showWorkspaceAppIcons, palette, widgets }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -184,6 +185,7 @@ struct BarConfiguration: Codable, Equatable {
         displayCornerRadius = try c.decodeIfPresent(Double.self, forKey: .displayCornerRadius) ?? 18
         manualNotchWidth = try c.decodeIfPresent(Double.self, forKey: .manualNotchWidth) ?? 0
         workspaceCount = try c.decodeIfPresent(Int.self, forKey: .workspaceCount) ?? 5
+        showWorkspaceAppIcons = try c.decodeIfPresent(Bool.self, forKey: .showWorkspaceAppIcons) ?? false
         palette = try c.decodeIfPresent(ThemePalette.self, forKey: .palette) ?? .sebastian
         widgets = try c.decodeIfPresent([WidgetConfiguration].self, forKey: .widgets) ?? WidgetConfiguration.defaults
     }

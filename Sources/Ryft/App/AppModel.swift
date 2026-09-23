@@ -213,7 +213,11 @@ final class AppModel: ObservableObject {
 
     func barConfiguration(for style: BuiltInBarStyle) -> BarConfiguration {
         var bar = configuration.bar
+        let widgetsAvoidNotch = bar.reserveNotchSpace
+        let barAvoidsNotch = bar.splitAroundNotch
         bar.apply(style)
+        bar.reserveNotchSpace = widgetsAvoidNotch
+        bar.splitAroundNotch = barAvoidsNotch
         return bar
     }
     func applyBarStyle(_ style: BuiltInBarStyle) {

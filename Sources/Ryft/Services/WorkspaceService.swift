@@ -2,6 +2,11 @@ import AppKit
 import Combine
 import Darwin
 
+struct WorkspaceApplication: Equatable {
+    let name: String
+    let bundlePath: String
+}
+
 /// Tracks the actual current Mission Control desktop. macOS exposes the change
 /// notification publicly but not the desktop index, so Ryft reads the same
 /// ordered Space metadata used by Dock through dynamically resolved SkyLight
@@ -10,24 +15,30 @@ final class WorkspaceService: ObservableObject {
     @Published private(set) var currentDesktop = 1
     @Published private(set) var desktopCount = 1
     @Published private(set) var canReadSpaces = false
+    @Published private(set) var desktopApplications: [Int: WorkspaceApplication] = [:]
     var experimentalTransitionsEnabled = true
 
     private let transitionController = WorkspaceTransitionController()
     private typealias MainConnection = @convention(c) () -> UInt32
     private typealias CopySpaces = @convention(c) (UInt32) -> Unmanaged<CFArray>?
     private typealias SetCurrentSpace = @convention(c) (UInt32, CFString, UInt64) -> Int32
+    private typealias CopyWindows = @convention(c) (UInt32, UInt32, CFArray, UInt32, UnsafePointer<UInt64>?, UnsafePointer<UInt64>?) -> Unmanaged<CFArray>?
     private let library: UnsafeMutableRawPointer?
     private let mainConnection: MainConnection?
     private let copySpaces: CopySpaces?
     private let setCurrentSpace: SetCurrentSpace?
+    private let copyWindows: CopyWindows?
     private var observer: NSObjectProtocol?
     private var refreshTimer: DispatchSourceTimer?
+    private var lastApplicationRefresh = Date.distantPast
+    private let iconCache = NSCache<NSString, NSImage>()
 
     init() {
         library = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY)
         if let library, let symbol = dlsym(library, "CGSMainConnectionID") { mainConnection = unsafeBitCast(symbol, to: MainConnection.self) } else { mainConnection = nil }
         if let library, let symbol = dlsym(library, "CGSCopyManagedDisplaySpaces") { copySpaces = unsafeBitCast(symbol, to: CopySpaces.self) } else { copySpaces = nil }
         if let library, let symbol = dlsym(library, "CGSManagedDisplaySetCurrentSpace") { setCurrentSpace = unsafeBitCast(symbol, to: SetCurrentSpace.self) } else { setCurrentSpace = nil }
+        if let library, let symbol = dlsym(library, "SLSCopyWindowsWithOptionsAndTags") { copyWindows = unsafeBitCast(symbol, to: CopyWindows.self) } else { copyWindows = nil }
         observer = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             // Read immediately, then retry on the next frames in case Dock has
             // posted before its managed-space dictionary is fully committed.
@@ -59,7 +70,40 @@ final class WorkspaceService: ObservableObject {
         let newCount = max(ids.count, 1)
         if desktopCount != newCount { desktopCount = newCount }
         if let index = ids.firstIndex(of: currentID), currentDesktop != index + 1 { currentDesktop = index + 1 }
+        if Date().timeIntervalSince(lastApplicationRefresh) >= 0.5 {
+            lastApplicationRefresh = Date(); refreshDesktopApplications(spaces: ordinary)
+        }
         if !canReadSpaces { canReadSpaces = true }
+    }
+
+    func icon(forDesktop number: Int) -> NSImage? {
+        guard let app = desktopApplications[number] else { return nil }
+        if let cached = iconCache.object(forKey: app.bundlePath as NSString) { return cached }
+        let icon = NSWorkspace.shared.icon(forFile: app.bundlePath); icon.size = NSSize(width: 32, height: 32)
+        iconCache.setObject(icon, forKey: app.bundlePath as NSString)
+        return icon
+    }
+
+    private func refreshDesktopApplications(spaces: [[String: Any]]) {
+        guard let mainConnection, let copyWindows else { return }
+        var result: [Int: WorkspaceApplication] = [:]
+        for (index, space) in spaces.enumerated() {
+            guard let id = number(space["ManagedSpaceID"]) else { continue }
+            var setTags: UInt64 = 0, clearTags: UInt64 = 0
+            guard let values = copyWindows(mainConnection(), 0, [NSNumber(value: id)] as CFArray, 0x2, &setTags, &clearTags)?.takeRetainedValue() as? [NSNumber] else { continue }
+            for value in values {
+                let windowID = CGWindowID(value.uint32Value)
+                guard let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], windowID) as? [[String: Any]], let window = info.first,
+                      (window[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+                      let ownerPID = (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+                      ownerPID != ProcessInfo.processInfo.processIdentifier,
+                      let app = NSRunningApplication(processIdentifier: ownerPID), app.activationPolicy == .regular,
+                      let bundleURL = app.bundleURL else { continue }
+                result[index + 1] = WorkspaceApplication(name: app.localizedName ?? "Application", bundlePath: bundleURL.path)
+                break
+            }
+        }
+        if result != desktopApplications { desktopApplications = result }
     }
 
     func switchTo(_ number: Int, report: @escaping (String) -> Void) {

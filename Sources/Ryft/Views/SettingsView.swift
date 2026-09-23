@@ -2,6 +2,24 @@ import SwiftUI
 import UniformTypeIdentifiers
 import Darwin
 
+private final class SettingsHoverState: ObservableObject { @Published var hovered = false }
+
+struct SettingsHoverButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> Body { Body(configuration: configuration) }
+    struct Body: View {
+        let configuration: ButtonStyleConfiguration
+        @StateObject private var state = SettingsHoverState()
+        var body: some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.985 : (state.hovered ? 1.012 : 1))
+                .opacity(configuration.isPressed ? 0.82 : 1)
+                .animation(.easeOut(duration: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.14), value: state.hovered)
+                .animation(.easeOut(duration: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.1), value: configuration.isPressed)
+                .onHover { state.hovered = $0 }
+        }
+    }
+}
+
 struct SettingsView: View {
     @ObservedObject var model: AppModel
 
@@ -22,7 +40,7 @@ struct SettingsView: View {
                             .background(model.selectedSection == section ? Color(hex: model.configuration.bar.palette.accent).opacity(0.18) : .clear)
                             .foregroundStyle(model.selectedSection == section ? Color.primary : Color.secondary)
                             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(SettingsHoverButtonStyle())
                 }
                 Spacer()
                 HStack { Circle().fill(Color(hex: model.configuration.bar.palette.success)).frame(width: 7, height: 7); Text(model.statusMessage).lineLimit(1); Spacer() }
@@ -143,7 +161,7 @@ private struct CurrentBarInspector: View {
     private var bar: BarConfiguration { model.configuration.bar }
     private var screenWidth: CGFloat { NSScreen.main?.frame.width ?? 1440 }
     private var notchWidth: CGFloat {
-        guard bar.reserveNotchSpace, !bar.notchMaskEnabled, let screen = NSScreen.main,
+        guard (bar.reserveNotchSpace || bar.splitAroundNotch), !bar.notchMaskEnabled, let screen = NSScreen.main,
               let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return bar.manualNotchWidth }
         return bar.manualNotchWidth > 0 ? CGFloat(bar.manualNotchWidth) : max(0, right.minX - left.maxX)
     }
@@ -173,7 +191,7 @@ private struct BarStylePreview: View {
                     let scale = min(1, (proxy.size.width - 16) / sourceWidth)
                     ZStack {
                         LinearGradient(colors: [Color(hex: preview.palette.muted).opacity(0.3), Color(hex: preview.palette.background).opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        BarView(model: model, notchWidth: 0, topReservedHeight: 0, configurationOverride: preview)
+                        BarView(model: model, notchWidth: (preview.reserveNotchSpace || preview.splitAroundNotch) ? 160 : 0, topReservedHeight: 0, configurationOverride: preview)
                             .frame(width: sourceWidth, height: preview.height + preview.outerInset * 2)
                             .scaleEffect(scale, anchor: .center)
                             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
@@ -188,7 +206,7 @@ private struct BarStylePreview: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10).background(Color.primary.opacity(0.045)).clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.09)))
-        }.buttonStyle(.plain).help("Apply \(style.rawValue)")
+        }.buttonStyle(SettingsHoverButtonStyle()).help("Apply \(style.rawValue)")
     }
 }
 
@@ -233,12 +251,12 @@ struct BarSettingsView: View {
                     ValueSlider("Shelf height override", value: $model.configuration.bar.notchMaskHeight, range: 0...60, suffix: "pt")
                     Text(model.configuration.bar.notchMaskHeight == 0 ? "Uses the MacBook safe-area height automatically. The shelf is a full-width, square-edged RGB 0,0,0 mask and the bar begins below it." : "The true-black shelf uses the chosen height and the bar begins immediately below it.").font(.caption).foregroundStyle(.secondary)
                 }
-                Toggle("Keep widgets clear of the notch", isOn: $model.configuration.bar.reserveNotchSpace).disabled(model.configuration.bar.notchMaskEnabled)
-                if model.configuration.bar.reserveNotchSpace && !model.configuration.bar.notchMaskEnabled {
-                    Toggle("Split bar around notch", isOn: $model.configuration.bar.splitAroundNotch)
+                Toggle("Widgets avoid notch", isOn: $model.configuration.bar.reserveNotchSpace).disabled(model.configuration.bar.notchMaskEnabled)
+                Toggle("Bar avoids notch", isOn: $model.configuration.bar.splitAroundNotch).disabled(model.configuration.bar.notchMaskEnabled)
+                if (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled {
                     ValueSlider("Notch width override", value: $model.configuration.bar.manualNotchWidth, range: 0...260, suffix: "pt")
-                    Text(model.configuration.bar.splitAroundNotch ? "The left and right bar surfaces stop before the camera area." : "Widgets avoid the camera area while one continuous background runs behind it.").font(.caption).foregroundStyle(.secondary)
-                    Text(model.configuration.bar.manualNotchWidth == 0 ? "Auto detects each display. External displays report no notch." : "Manual width replaces safe-area detection on every display.").font(.caption).foregroundStyle(.secondary)
+                    Text(model.configuration.bar.splitAroundNotch ? "The complete bar splits around the camera area, including its surface and widgets." : "Only widgets move clear of the camera area; the bar surface remains continuous.").font(.caption).foregroundStyle(.secondary)
+                    Text(model.configuration.bar.manualNotchWidth == 0 ? "Auto detects each display. Style previews show the spacing without drawing a notch." : "Manual width replaces safe-area detection on every display.").font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
                 Toggle("Round bottom display corners", isOn: $model.configuration.bar.roundBottomDisplayCorners)
@@ -293,7 +311,7 @@ struct ThemeSettingsView: View {
                         }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
                             .background(model.configuration.bar.palette.id == theme.id ? Color.accentColor.opacity(0.1) : .clear)
                             .clipShape(RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(model.configuration.bar.palette.id == theme.id ? Color.accentColor : .primary.opacity(0.08)))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(SettingsHoverButtonStyle())
                 }
             }
         }
@@ -340,6 +358,8 @@ struct ModuleSettingsView: View {
         }
         SettingsGroup("Desktop buttons") {
             Stepper("Number of desktops: \(model.configuration.bar.workspaceCount)", value: $model.configuration.bar.workspaceCount, in: 1...9)
+            Toggle("Show app icons instead of numbers", isOn: $model.configuration.bar.showWorkspaceAppIcons)
+            Text("A desktop with an application shows its frontmost app icon in a circular button. Empty desktops keep their number.").font(.caption).foregroundStyle(.secondary)
             Text("Desktop buttons send macOS Control+Number. Enable matching shortcuts in System Settings, Keyboard, Keyboard Shortcuts, Mission Control.").font(.caption).foregroundStyle(.secondary)
             Button("Open Accessibility Settings") { WorkspaceController.requestAccessibility() }
         }

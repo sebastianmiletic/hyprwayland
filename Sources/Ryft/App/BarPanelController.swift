@@ -137,7 +137,7 @@ final class BarPanelController {
     }
 
     private func notchWidth(for screen: NSScreen, config: BarConfiguration) -> Double {
-        guard config.reserveNotchSpace, !config.notchMaskEnabled else { return 0 }
+        guard (config.reserveNotchSpace || config.splitAroundNotch), !config.notchMaskEnabled else { return 0 }
         if config.manualNotchWidth > 0 { return config.manualNotchWidth }
         guard config.position == .top, let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return 0 }
         return max(0, right.minX - left.maxX)

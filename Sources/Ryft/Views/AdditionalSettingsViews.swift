@@ -101,7 +101,7 @@ struct WallpaperGalleryView: View {
                 Text("Wallpaper library").font(.title3.weight(.semibold))
             }.frame(width: 170, alignment: .leading)
             toolbarButton("house.fill", selected: model.wallpaperViewMode == 0) { model.wallpaperViewMode = 0 }
-            HStack(spacing: 8) { Image(systemName: "magnifyingglass").foregroundStyle(Color(hex: palette.muted)); TextField("Search the library", text: $model.wallpaperSearch).textFieldStyle(.plain); if !model.wallpaperSearch.isEmpty { Button { model.wallpaperSearch = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(Color(hex: palette.muted)) } }
+            HStack(spacing: 8) { Image(systemName: "magnifyingglass").foregroundStyle(Color(hex: palette.muted)); TextField("Search the library", text: $model.wallpaperSearch).textFieldStyle(.plain); if !model.wallpaperSearch.isEmpty { Button { model.wallpaperSearch = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(SettingsHoverButtonStyle()).foregroundStyle(Color(hex: palette.muted)) } }
                 .padding(.horizontal, 12).frame(maxWidth: .infinity).frame(height: 40).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             toolbarButton(model.wallpaperGridMode ? "rectangle.split.3x3" : "rectangle.split.3x1", selected: model.wallpaperGridMode) { model.wallpaperGridMode.toggle(); model.wallpaperViewMode = 1 }
             toolbarButton(model.wallpaperViewMode == 2 ? "heart.fill" : "heart", selected: model.wallpaperViewMode == 2) { model.wallpaperViewMode = model.wallpaperViewMode == 2 ? 1 : 2 }
@@ -118,7 +118,7 @@ struct WallpaperGalleryView: View {
                 Button { model.configuration.adaptColorsToWallpaper.toggle() } label: { Label("Adapt bar colors to wallpaper", systemImage: model.configuration.adaptColorsToWallpaper ? "checkmark" : "circle") }
             } label: { Image(systemName: "plus").frame(width: 28, height: 28) }
             if model.installingWallpaperArchive { ProgressView().controlSize(.small) }
-            Button { applySelected() } label: { Label("Apply", systemImage: "checkmark").font(.caption.weight(.semibold)).padding(.horizontal, 12).frame(height: 38).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(RoundedRectangle(cornerRadius: 12)) }.buttonStyle(.plain).keyboardShortcut(.return, modifiers: []).help("Apply selected wallpaper")
+            Button { applySelected() } label: { Label("Apply", systemImage: "checkmark").font(.caption.weight(.semibold)).padding(.horizontal, 12).frame(height: 38).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(RoundedRectangle(cornerRadius: 12)) }.buttonStyle(SettingsHoverButtonStyle()).keyboardShortcut(.return, modifiers: []).help("Apply selected wallpaper")
             toolbarButton("shuffle", selected: false) { model.randomWallpaper() }
         }.frame(height: 44).help(model.wallpaperArchiveStatus)
     }
@@ -171,7 +171,7 @@ struct WallpaperGalleryView: View {
     }
     private func applySelected() { if filtered.indices.contains(selectedIndex) { model.setWallpaper(filtered[selectedIndex]) } }
     private func toolbarButton(_ icon: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: icon).frame(width: 38, height: 38).background(selected ? Color(hex: palette.accent) : Color(hex: palette.surface)).foregroundStyle(selected ? Color(hex: palette.background) : Color(hex: palette.foreground)).clipShape(RoundedRectangle(cornerRadius: 12)) }.buttonStyle(.plain)
+        Button(action: action) { Image(systemName: icon).frame(width: 38, height: 38).background(selected ? Color(hex: palette.accent) : Color(hex: palette.surface)).foregroundStyle(selected ? Color(hex: palette.background) : Color(hex: palette.foreground)).clipShape(RoundedRectangle(cornerRadius: 12)) }.buttonStyle(SettingsHoverButtonStyle())
     }
 }
 
@@ -192,7 +192,7 @@ private struct WallpaperCategoryChip: View {
                 Text(name).font(.caption.weight(.semibold)).lineLimit(1).padding(.horizontal, 12)
             }.frame(minWidth: 100, minHeight: 46).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(model.wallpaperCategory == name ? Color(hex: model.configuration.bar.palette.accent) : .clear, lineWidth: 2))
-        }.buttonStyle(.plain)
+        }.buttonStyle(SettingsHoverButtonStyle())
     }
 }
 
@@ -208,8 +208,8 @@ private struct WallpaperTile: View {
                 ZStack(alignment: .bottomLeading) {
                     if let image = thumbnail.image { Image(nsImage: image).resizable().scaledToFill() } else { Color(hex: model.configuration.bar.palette.surface); ProgressView() }
                 }
-            }.buttonStyle(.plain).frame(maxWidth: .infinity, maxHeight: .infinity)
-            Button { model.toggleFavorite(url) } label: { Image(systemName: model.isFavorite(url) ? "heart.fill" : "heart").foregroundStyle(.white).frame(width: 30, height: 30).background(.black.opacity(0.52)).clipShape(Circle()) }.buttonStyle(.plain).padding(10)
+            }.buttonStyle(SettingsHoverButtonStyle()).frame(maxWidth: .infinity, maxHeight: .infinity)
+            Button { model.toggleFavorite(url) } label: { Image(systemName: model.isFavorite(url) ? "heart.fill" : "heart").foregroundStyle(.white).frame(width: 30, height: 30).background(.black.opacity(0.52)).clipShape(Circle()) }.buttonStyle(SettingsHoverButtonStyle()).padding(10)
         }.clipped().clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 17).stroke(selected || model.configuration.currentWallpaper == url.path ? Color(hex: model.configuration.bar.palette.accent) : .clear, lineWidth: selected ? 4 : 3))
     }

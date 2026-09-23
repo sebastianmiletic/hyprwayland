@@ -202,10 +202,21 @@ private struct WidgetView: View {
                     Button {
                         if actionEnabled { workspaces.switchTo(number) { model.statusMessage = $0 } }
                     } label: {
-                        Text("\(number)").font(.system(size: 11, weight: .semibold, design: .rounded)).frame(width: 22, height: 22)
-                            .background(number == workspaces.currentDesktop ? Color(hex: palette.accent) : .clear)
-                            .foregroundStyle(number == workspaces.currentDesktop ? Color(hex: palette.background) : Color(hex: palette.muted)).clipShape(Circle()).frame(width: 26, height: 26)
-                    }.buttonStyle(SourcePressButtonStyle()).accessibilityLabel("Desktop \(number)")
+                        ZStack {
+                            Circle().fill(number == workspaces.currentDesktop ? Color(hex: palette.accent) : .clear)
+                            if model.configuration.bar.showWorkspaceAppIcons, let icon = workspaces.icon(forDesktop: number) {
+                                Image(nsImage: icon).resizable().scaledToFit().padding(2).clipShape(Circle())
+                            } else {
+                                Text("\(number)").font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(number == workspaces.currentDesktop ? Color(hex: palette.background) : Color(hex: palette.muted))
+                            }
+                        }
+                        .frame(width: 22, height: 22)
+                        .overlay(Circle().stroke(number == workspaces.currentDesktop ? Color(hex: palette.accent) : .clear, lineWidth: 1.5))
+                        .frame(width: 26, height: 26)
+                    }.buttonStyle(SourcePressButtonStyle())
+                        .accessibilityLabel(workspaces.desktopApplications[number].map { "Desktop \(number), \($0.name)" } ?? "Desktop \(number)")
+                        .help(workspaces.desktopApplications[number].map { "Desktop \(number) · \($0.name)" } ?? "Desktop \(number)")
                 }
             }
         case .clock:
@@ -597,11 +608,8 @@ struct EditableBarCanvas: View {
         GeometryReader { proxy in
             ZStack(alignment: .top) {
                 LinearGradient(colors: [Color(hex: model.configuration.bar.palette.muted).opacity(0.28), Color(hex: model.configuration.bar.palette.background).opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                BarView(model: model, notchWidth: model.configuration.bar.reserveNotchSpace && !model.configuration.bar.notchMaskEnabled ? min(180, proxy.size.width * 0.18) : 0, topReservedHeight: model.configuration.bar.notchMaskEnabled ? 32 : 0, editing: true) { selectedWidgetID = $0 }
-                if model.configuration.bar.reserveNotchSpace && !model.configuration.bar.notchMaskEnabled {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(nsColor: .black)).frame(width: min(164, proxy.size.width * 0.17), height: 34).offset(y: -10)
-                }
-                Text("Drag widgets directly on the bar. Drop near the center edges to move around the notch.")
+                BarView(model: model, notchWidth: (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled ? min(180, proxy.size.width * 0.18) : 0, topReservedHeight: model.configuration.bar.notchMaskEnabled ? 32 : 0, editing: true) { selectedWidgetID = $0 }
+                Text("Drag widgets directly on the bar. The center spacing previews notch avoidance without drawing the notch.")
                     .font(.caption).foregroundStyle(.white.opacity(0.82)).padding(.horizontal, 10).padding(.vertical, 6)
                     .background(.black.opacity(0.5)).clipShape(Capsule()).frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 8)
             }
@@ -618,11 +626,7 @@ struct BarPreview: View {
         GeometryReader { proxy in
             ZStack(alignment: .top) {
                 LinearGradient(colors: [Color(hex: model.configuration.bar.palette.muted).opacity(0.34), Color(hex: model.configuration.bar.palette.background).opacity(0.72)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                BarView(model: model, notchWidth: model.configuration.bar.reserveNotchSpace && !model.configuration.bar.notchMaskEnabled ? min(180, proxy.size.width * 0.18) : 0, topReservedHeight: model.configuration.bar.notchMaskEnabled ? 32 : 0)
-                if model.configuration.bar.reserveNotchSpace && !model.configuration.bar.notchMaskEnabled {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(nsColor: .black)).frame(width: min(164, proxy.size.width * 0.17), height: 34).offset(y: -10)
-                }
+                BarView(model: model, notchWidth: (model.configuration.bar.reserveNotchSpace || model.configuration.bar.splitAroundNotch) && !model.configuration.bar.notchMaskEnabled ? min(180, proxy.size.width * 0.18) : 0, topReservedHeight: model.configuration.bar.notchMaskEnabled ? 32 : 0)
             }
         }
         .frame(height: max(86, model.configuration.bar.height + model.configuration.bar.outerInset * 2 + 28 + (model.configuration.bar.notchMaskEnabled ? 32 : 0)))

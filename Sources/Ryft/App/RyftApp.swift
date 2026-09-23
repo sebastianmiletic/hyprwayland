@@ -52,6 +52,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observers.append(NotificationCenter.default.addObserver(forName: .ryftToggleLeftSidebar, object: nil, queue: .main) { [weak self] _ in self?.sidePanelController?.toggleLeft() })
         observers.append(NotificationCenter.default.addObserver(forName: .ryftToggleRightSidebar, object: nil, queue: .main) { [weak self] note in self?.sidePanelController?.toggleRight(detail: note.object as? String ?? "") })
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in NSMenu.setMenuBarVisible(false) })
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.hideSettingsAfterSpaceChange() }
+        })
         installStatusItem()
         NSMenu.setMenuBarVisible(false)
         DispatchQueue.main.async { [weak self] in
@@ -118,6 +121,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func closeSettingsWindow() { hideSettings() }
+    private func hideSettingsAfterSpaceChange() {
+        guard settingsWindow?.isVisible == true else { return }
+        if settingsAnimationInProgress {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.hideSettingsAfterSpaceChange() }
+        } else { hideSettings() }
+    }
     private func hideSettings() {
         guard let settingsWindow, settingsWindow.isVisible, !settingsAnimationInProgress else { return }
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { settingsWindow.orderOut(nil); return }
