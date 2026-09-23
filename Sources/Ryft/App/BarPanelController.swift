@@ -85,9 +85,10 @@ final class BarPanelController {
         panel.alphaValue = 1
         panel.hasShadow = false
         panel.hidesOnDeactivate = false
-        // Let AppKit place a copy in each Space. Keeping one stationary,
-        // translucent panel exposed the compositor's black transition frame.
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        // Experimental Hyprland-style Space behavior: keep the shell surface
+        // fixed while macOS moves desktop windows beneath it. This is isolated
+        // to the bar panel so it can be reverted without touching Space logic.
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.isMovable = false
         panel.ignoresMouseEvents = false
         panel.contentView = NSHostingView(rootView: StableBarRoot(model: model, context: context))
