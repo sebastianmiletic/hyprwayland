@@ -222,6 +222,21 @@ struct GeneralSettingsView: View {
             Toggle("Launch Ryft at login", isOn: Binding(get: { model.configuration.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
             Text("Login registration works after Ryft is installed as an application bundle.").font(.caption).foregroundStyle(.secondary)
         }
+        SettingsGroup("Desktop experience") {
+            Toggle("Use Hyprland cursor", isOn: $model.configuration.useHyprlandCursor)
+            Text("Uses the source setup’s Bibata Modern Classic pointer across macOS. Turn it off at any time to restore the native cursor. This experimental overlay keeps one consistent arrow rather than replacing macOS text and resize cursors.").font(.caption).foregroundStyle(.secondary)
+            Divider()
+            Toggle("Ryft workspace slide", isOn: $model.configuration.experimentalWorkspaceTransitions)
+            HStack {
+                Label(CGPreflightScreenCaptureAccess() ? "Screen Recording allowed" : "Screen Recording needed", systemImage: CGPreflightScreenCaptureAccess() ? "checkmark.circle.fill" : "record.circle")
+                    .font(.caption).foregroundStyle(CGPreflightScreenCaptureAccess() ? Color(hex: model.configuration.bar.palette.success) : .secondary)
+                Spacer()
+                if !CGPreflightScreenCaptureAccess() {
+                    Button("Allow Screen Recording…") { let granted = CGRequestScreenCaptureAccess(); model.statusMessage = granted ? "Screen Recording enabled" : "Screen Recording permission unchanged" }
+                }
+            }
+            Text("Ryft-initiated desktop changes use a 220 ms Hyprland-style slide while the top bar stays fixed. Trackpad gestures retain Apple’s native animation, with the stationary Ryft bar layered above it.").font(.caption).foregroundStyle(.secondary)
+        }
         SettingsGroup("Profiles and saving") {
             HStack { Button("Save now") { model.save() }; Button("Import profile") { model.importProfile() }; Button("Export profile") { model.exportProfile() }; Spacer(); Button("Reset defaults", role: .destructive) { model.reset() } }
             Label("Every change is saved automatically", systemImage: "checkmark.circle.fill").foregroundStyle(Color(hex: model.configuration.bar.palette.success))

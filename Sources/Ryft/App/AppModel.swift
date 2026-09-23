@@ -184,6 +184,9 @@ final class AppModel: ObservableObject {
         $configuration.map { ($0.wallpaperFolders + ["|"] + $0.wallpaperFiles).joined(separator: "\u{0}") }
             .removeDuplicates().dropFirst().debounce(for: .milliseconds(250), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.refreshWallpapers() }.store(in: &cancellables)
+        workspaces.experimentalTransitionsEnabled = configuration.experimentalWorkspaceTransitions
+        $configuration.map(\.experimentalWorkspaceTransitions).removeDuplicates().dropFirst()
+            .sink { [weak self] in self?.workspaces.experimentalTransitionsEnabled = $0 }.store(in: &cancellables)
         if !configuration.hasCompletedOnboarding { selectedSection = .permissions }
         refreshWallpapers()
         save()

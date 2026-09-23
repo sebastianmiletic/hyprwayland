@@ -23,8 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var barController: BarPanelController?
     private var wallpaperController: WallpaperWindowController?
     private var sidePanelController: SidePanelController?
+    private var cursorTheme: CursorThemeService?
     private var hotkeys: GlobalHotkeyManager?
     private var cancellable: AnyCancellable?
+    private var cursorCancellable: AnyCancellable?
     private var observers: [NSObjectProtocol] = []
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
@@ -37,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         barController = BarPanelController(model: model)
         wallpaperController = WallpaperWindowController(model: model)
         sidePanelController = SidePanelController(model: model)
+        let cursorTheme = CursorThemeService.shared; cursorTheme.setEnabled(model.configuration.useHyprlandCursor); self.cursorTheme = cursorTheme
+        cursorCancellable = model.$configuration.map(\.useHyprlandCursor).removeDuplicates().dropFirst().sink { [weak cursorTheme] in cursorTheme?.setEnabled($0) }
         let manager = GlobalHotkeyManager()
         manager.onShortcut = { [weak self] shortcut in self?.perform(shortcut) }
         manager.onWorkspace = { number in model.workspaces.switchTo(number) { model.statusMessage = $0 } }
@@ -62,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationWillResignActive(_ notification: Notification) { AppModel.shared.save() }
-    func applicationWillTerminate(_ notification: Notification) { NSMenu.setMenuBarVisible(true); AppModel.shared.save() }
+    func applicationWillTerminate(_ notification: Notification) { cursorTheme?.setEnabled(false); NSMenu.setMenuBarVisible(true); AppModel.shared.save() }
     func showWallpaperGallery() { wallpaperController?.show() }
     func showSettings() {
         captureSettingsWindow()

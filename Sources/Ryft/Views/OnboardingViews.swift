@@ -35,6 +35,11 @@ struct PermissionsSettingsView: View {
                     notifications.requestAuthorization()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { model.statusMessage = "Permission status refreshed" }
                 }
+                Divider()
+                permissionRow("Screen Recording", detail: "Captures one temporary frame for Ryft’s optional workspace slide. Frames stay in memory and are discarded immediately.", symbol: "rectangle.on.rectangle", status: CGPreflightScreenCaptureAccess() ? "Allowed" : "Not allowed", granted: CGPreflightScreenCaptureAccess()) {
+                    let granted = CGRequestScreenCaptureAccess()
+                    model.statusMessage = granted ? "Screen Recording enabled" : "Screen Recording permission unchanged"
+                }
             }
             if !model.configuration.hasCompletedOnboarding {
                 HStack {

@@ -282,8 +282,10 @@ struct RyftConfiguration: Codable, Equatable {
     var sourcePresetVersion = 13
     var launchAtLogin = false
     var hasCompletedOnboarding = false
+    var useHyprlandCursor = false
+    var experimentalWorkspaceTransitions = true
 
-    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin, hasCompletedOnboarding }
+    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin, hasCompletedOnboarding, useHyprlandCursor, experimentalWorkspaceTransitions }
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -301,6 +303,8 @@ struct RyftConfiguration: Codable, Equatable {
         // Existing installations have already reached the product. Only a
         // genuinely new configuration enters first-run onboarding.
         hasCompletedOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding) ?? true
+        useHyprlandCursor = try c.decodeIfPresent(Bool.self, forKey: .useHyprlandCursor) ?? false
+        experimentalWorkspaceTransitions = try c.decodeIfPresent(Bool.self, forKey: .experimentalWorkspaceTransitions) ?? true
     }
 }
 

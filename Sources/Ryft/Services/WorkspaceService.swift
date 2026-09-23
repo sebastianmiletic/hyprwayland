@@ -10,7 +10,9 @@ final class WorkspaceService: ObservableObject {
     @Published private(set) var currentDesktop = 1
     @Published private(set) var desktopCount = 1
     @Published private(set) var canReadSpaces = false
+    var experimentalTransitionsEnabled = true
 
+    private let transitionController = WorkspaceTransitionController()
     private typealias MainConnection = @convention(c) () -> UInt32
     private typealias CopySpaces = @convention(c) (UInt32) -> Unmanaged<CFArray>?
     private typealias SetCurrentSpace = @convention(c) (UInt32, CFString, UInt64) -> Int32
@@ -62,13 +64,38 @@ final class WorkspaceService: ObservableObject {
 
     func switchTo(_ number: Int, report: @escaping (String) -> Void) {
         guard number >= 1, number <= max(desktopCount, 1) else { return }
-        if number == currentDesktop { return }
+        let previous = currentDesktop
+        if number == previous { return }
         currentDesktop = number
+        if experimentalTransitionsEnabled {
+            let animated = transitionController.perform(direction: number > previous ? 1 : -1) { [weak self] in self?.setDesktopDirectly(number) ?? false }
+            if animated {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { [weak self] in self?.refresh() }
+                return
+            }
+        }
         WorkspaceController.switchTo(number)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             self?.refresh()
             if self?.currentDesktop != number { report("Turn on Control–\(number) in System Settings › Keyboard › Keyboard Shortcuts › Mission Control") }
         }
+    }
+
+    private func setDesktopDirectly(_ number: Int) -> Bool {
+        guard let mainConnection, let copySpaces, let setCurrentSpace,
+              let displays = copySpaces(mainConnection())?.takeRetainedValue() as? [[String: Any]] else { return false }
+        let connection = mainConnection()
+        var changed = false
+        for display in displays {
+            guard let spaces = display["Spaces"] as? [[String: Any]],
+                  let current = display["Current Space"] as? [String: Any] else { continue }
+            let ordinary = spaces.filter { (self.number($0["type"]) ?? 0) == 0 }
+            guard ordinary.indices.contains(number - 1), let target = self.number(ordinary[number - 1]["ManagedSpaceID"]) else { continue }
+            let identifier = (current["Display Identifier"] as? String) ?? ordinary.compactMap { $0["Display Identifier"] as? String }.first ?? (display["Display Identifier"] as? String) ?? "Main"
+            if setCurrentSpace(connection, identifier as CFString, UInt64(target)) == 0 { changed = true }
+        }
+        if changed { DispatchQueue.main.async { [weak self] in self?.refresh() } }
+        return changed
     }
 
     /// Visits each ordinary Mission Control desktop directly through the same

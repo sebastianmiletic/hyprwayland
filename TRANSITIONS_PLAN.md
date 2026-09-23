@@ -1,4 +1,8 @@
-# Workspace transition plan
+# Workspace transitions
+
+## Implementation status
+
+The first experimental implementation is active for Ryft-initiated switches. It captures one temporary frame per display, switches directly through managed Space metadata, slides the outgoing frame away in 220 ms, and keeps the Ryft bar stationary above it. Screen Recording is explicit and optional; missing permission falls back to the native switch. Captures remain in memory and are discarded after every transition.
 
 ## Feasibility boundary
 
@@ -34,9 +38,9 @@ It receives `switch(from:to:direction:)` from `WorkspaceService`, coalesces repe
 
 ### 2. Capture
 
-Use ScreenCaptureKit where available. Request Screen Recording permission explicitly and explain why. Cache one downscaled frame per display and avoid retaining historical desktop contents. Do not save captures to disk.
+The experimental implementation uses a one-frame Core Graphics display capture after an explicit Screen Recording grant. It does not retain historical desktop contents or save captures to disk. A future production pass can move capture to ScreenCaptureKit if profiling or platform changes require it.
 
-A no-capture mode can animate an opaque wallpaper-backed layer, but it must be labeled as a simplified transition rather than pretending to represent the outgoing desktop.
+Without capture access, Ryft falls back immediately to the native switch rather than presenting a fake desktop frame.
 
 ### 3. Overlay windows
 
@@ -76,15 +80,14 @@ Repeated next/previous commands update the queued destination rather than spawni
 
 ## Settings
 
-Add a **Workspace transitions** section under General:
+General currently provides:
 
-- Enable Ryft transitions
-- Style: Slide, Hyprland slide, Fade, Instant
-- Duration: 100 to 350 ms
-- Animate direction from workspace order
-- Animate bar and side panels
-- Permission status and a Screen Recording button
-- A real preview using captured sample frames, not decorative placeholders
+- Enable Ryft workspace slide
+- Fixed 220 ms directional Hyprland-style motion
+- A stationary bar
+- Screen Recording status and an explicit permission button
+
+Style, duration, overlay inclusion, and an interactive preview remain possible future controls if the experiment proves stable.
 
 ## Performance requirements
 
