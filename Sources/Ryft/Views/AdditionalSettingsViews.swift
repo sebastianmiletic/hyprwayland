@@ -1,6 +1,8 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import ApplicationServices
+import CoreLocation
 
 struct ShortcutSettingsView: View {
     @ObservedObject var model: AppModel
@@ -217,7 +219,63 @@ private struct WallpaperTile: View {
 
 struct GeneralSettingsView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var notifications: NotificationDaemon
+    private var palette: ThemePalette { model.configuration.bar.palette }
+
+    init(model: AppModel) {
+        self.model = model
+        notifications = model.notifications
+    }
+
     var body: some View {
+        SettingsGroup("Permissions") {
+            permissionRow(
+                "Accessibility",
+                detail: "Desktop switching and macOS control actions.",
+                symbol: "accessibility",
+                granted: RyftPermissionStatus.accessibilityGranted
+            ) { WorkspaceController.requestAccessibility() }
+            Divider()
+            permissionRow(
+                "Input Monitoring",
+                detail: "Global Option+A, Option+N, and desktop shortcuts.",
+                symbol: "keyboard",
+                granted: RyftPermissionStatus.inputMonitoringGranted
+            ) { openPrivacyPane("Privacy_ListenEvent") }
+            Divider()
+            permissionRow(
+                "Location for Wi-Fi",
+                detail: "Nearby Wi-Fi names. Ryft never stores location data.",
+                symbol: "location",
+                granted: RyftPermissionStatus.locationGranted
+            ) {
+                let status = CLLocationManager().authorizationStatus
+                if status == .notDetermined { model.controls.requestWiFiAccessAndScan() }
+                else { openPrivacyPane("Privacy_LocationServices") }
+            }
+            Divider()
+            permissionRow(
+                "Notifications",
+                detail: "Ryft battery warnings.",
+                symbol: "bell",
+                granted: RyftPermissionStatus.notificationsGranted(status: notifications.authorizationStatus)
+            ) {
+                if notifications.authorizationStatus == "Not requested" { notifications.requestAuthorization() }
+                else if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") { NSWorkspace.shared.open(url) }
+            }
+            Divider()
+            permissionRow(
+                "Screen Recording",
+                detail: "Temporary in-memory frames for the optional workspace slide.",
+                symbol: "rectangle.on.rectangle",
+                granted: RyftPermissionStatus.screenRecordingGranted
+            ) {
+                let granted = CGRequestScreenCaptureAccess()
+                model.statusMessage = granted ? "Screen Recording enabled" : "Screen Recording permission unchanged"
+            }
+            Text("A red dot beside General remains visible while any permission needs attention. Select Review to open the matching macOS control.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
         SettingsGroup("Startup") {
             Toggle("Launch Ryft at login", isOn: Binding(get: { model.configuration.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
             Text("Login registration works after Ryft is installed as an application bundle.").font(.caption).foregroundStyle(.secondary)
@@ -227,15 +285,7 @@ struct GeneralSettingsView: View {
             Text("Uses the source setup’s Bibata Modern Classic pointer across macOS. Turn it off at any time to restore the native cursor. This experimental overlay keeps one consistent arrow rather than replacing macOS text and resize cursors.").font(.caption).foregroundStyle(.secondary)
             Divider()
             Toggle("Ryft workspace slide", isOn: $model.configuration.experimentalWorkspaceTransitions)
-            HStack {
-                Label(CGPreflightScreenCaptureAccess() ? "Screen Recording allowed" : "Screen Recording needed", systemImage: CGPreflightScreenCaptureAccess() ? "checkmark.circle.fill" : "record.circle")
-                    .font(.caption).foregroundStyle(CGPreflightScreenCaptureAccess() ? Color(hex: model.configuration.bar.palette.success) : .secondary)
-                Spacer()
-                if !CGPreflightScreenCaptureAccess() {
-                    Button("Allow Screen Recording…") { let granted = CGRequestScreenCaptureAccess(); model.statusMessage = granted ? "Screen Recording enabled" : "Screen Recording permission unchanged" }
-                }
-            }
-            Text("Ryft-initiated desktop changes use a 220 ms Hyprland-style slide while the top bar stays fixed. Trackpad gestures retain Apple’s native animation, with the stationary Ryft bar layered above it.").font(.caption).foregroundStyle(.secondary)
+            Text("Ryft-initiated desktop changes use a 220 ms Hyprland-style slide while the top bar stays fixed. Trackpad gestures retain Apple’s native animation, with the stationary Ryft bar layered above it. Screen Recording access is managed in Permissions above.").font(.caption).foregroundStyle(.secondary)
         }
         SettingsGroup("Profiles and saving") {
             HStack { Button("Save now") { model.save() }; Button("Import profile") { model.importProfile() }; Button("Export profile") { model.exportProfile() }; Spacer(); Button("Reset defaults", role: .destructive) { model.reset() } }
@@ -250,5 +300,25 @@ struct GeneralSettingsView: View {
         Divider().padding(.vertical, 4)
         Button(role: .destructive) { NSApp.terminate(nil) } label: { Label("Quit Ryft", systemImage: "power").frame(maxWidth: .infinity) }
             .buttonStyle(.bordered).controlSize(.large)
+    }
+
+    private func permissionRow(_ title: String, detail: String, symbol: String, granted: Bool, action: @escaping () -> Void) -> some View {
+        HStack(spacing: 13) {
+            Image(systemName: symbol).font(.system(size: 16, weight: .semibold)).foregroundStyle(Color(hex: palette.accent)).frame(width: 25)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).fontWeight(.semibold)
+                Text(detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 16)
+            Label(granted ? "Allowed" : "Needed", systemImage: granted ? "checkmark.circle.fill" : "circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(granted ? Color(hex: palette.success) : Color.red)
+            if !granted { Button("Review", action: action).buttonStyle(.bordered) }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func openPrivacyPane(_ pane: String) {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") { NSWorkspace.shared.open(url) }
     }
 }

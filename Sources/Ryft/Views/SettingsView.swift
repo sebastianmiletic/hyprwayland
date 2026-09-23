@@ -22,6 +22,16 @@ struct SettingsHoverButtonStyle: ButtonStyle {
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var notifications: NotificationDaemon
+
+    init(model: AppModel) {
+        self.model = model
+        notifications = model.notifications
+    }
+
+    private var missingPermissionCount: Int {
+        RyftPermissionStatus.missingCount(notificationStatus: notifications.authorizationStatus)
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -35,7 +45,17 @@ struct SettingsView: View {
                     section != .home && (!model.configuration.hasCompletedOnboarding || (section != .permissions && section != .guide))
                 }) { section in
                     Button { model.selectedSection = section } label: {
-                        HStack(spacing: 10) { Image(systemName: section.symbol).frame(width: 18); Text(section.rawValue); Spacer() }
+                        HStack(spacing: 10) {
+                            Image(systemName: section.symbol).frame(width: 18)
+                            Text(section.rawValue)
+                            Spacer()
+                            if section == .general && missingPermissionCount > 0 {
+                                Circle().fill(Color.red).frame(width: 7, height: 7)
+                                    .help("\(missingPermissionCount) permissions need attention")
+                                    .accessibilityLabel("Permissions need attention")
+                                    .accessibilityValue("\(missingPermissionCount) missing")
+                            }
+                        }
                             .padding(.horizontal, 11).frame(height: 36)
                             .background(model.selectedSection == section ? Color(hex: model.configuration.bar.palette.accent).opacity(0.18) : .clear)
                             .foregroundStyle(model.selectedSection == section ? Color.primary : Color.secondary)
@@ -66,6 +86,10 @@ struct SettingsView: View {
         }
         .background(.regularMaterial)
         .frame(minWidth: 820, minHeight: 560)
+        .onAppear { notifications.refreshAuthorization() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            notifications.refreshAuthorization()
+        }
     }
 
     @ViewBuilder private var page: some View {
