@@ -165,7 +165,8 @@ final class GlobalHotkeyManager {
 
     private func invoke(_ shortcut: ShortcutConfiguration) {
         let invocationKey = shortcut.action.rawValue + "|" + shortcut.display
-        if let lastInvocation, lastInvocation.0 == invocationKey, Date().timeIntervalSince(lastInvocation.1) < 0.18 { return }
+        let duplicateWindow = shortcut.action == .leftSidebar || shortcut.action == .rightSidebar ? 0.4 : 0.18
+        if let lastInvocation, lastInvocation.0 == invocationKey, Date().timeIntervalSince(lastInvocation.1) < duplicateWindow { return }
         lastInvocation = (invocationKey, Date()); NSLog("Ryft received global shortcut %@", shortcut.display); onShortcut?(shortcut)
     }
 

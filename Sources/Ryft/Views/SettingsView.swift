@@ -13,7 +13,9 @@ struct SettingsView: View {
                         .frame(width: 30, height: 30)
                     Text("Ryft").font(.system(size: 19, weight: .bold, design: .rounded))
                 }.padding(.horizontal, 12).padding(.bottom, 12)
-                ForEach(AppSection.allCases.filter { $0 != .home }) { section in
+                ForEach(AppSection.allCases.filter { section in
+                    section != .home && (!model.configuration.hasCompletedOnboarding || (section != .permissions && section != .guide))
+                }) { section in
                     Button { model.selectedSection = section } label: {
                         HStack(spacing: 10) { Image(systemName: section.symbol).frame(width: 18); Text(section.rawValue); Spacer() }
                             .padding(.horizontal, 11).frame(height: 36)
