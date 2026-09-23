@@ -7,7 +7,7 @@ import Combine
 struct RyftPermissionStatus {
     static var accessibilityGranted: Bool { AXIsProcessTrusted() }
     static var inputMonitoringGranted: Bool { CGPreflightListenEventAccess() }
-    static var screenRecordingGranted: Bool { CGPreflightScreenCaptureAccess() }
+    static var screenRecordingGranted: Bool { CGPreflightScreenCaptureAccess() || UserDefaults.standard.bool(forKey: "RyftVerifiedScreenRecording") }
 
     static var locationGranted: Bool {
         let status = CLLocationManager().authorizationStatus
@@ -35,7 +35,7 @@ final class RyftPermissionMonitor: ObservableObject {
 
     @Published private(set) var accessibilityGranted = AXIsProcessTrusted()
     @Published private(set) var inputMonitoringGranted = CGPreflightListenEventAccess()
-    @Published private(set) var screenRecordingGranted = CGPreflightScreenCaptureAccess()
+    @Published private(set) var screenRecordingGranted = RyftPermissionStatus.screenRecordingGranted
     @Published private(set) var locationGranted = RyftPermissionStatus.locationGranted
 
     private var timer: Timer?
@@ -58,7 +58,7 @@ final class RyftPermissionMonitor: ObservableObject {
     func refresh() {
         let accessibility = AXIsProcessTrusted()
         let input = CGPreflightListenEventAccess()
-        let recording = CGPreflightScreenCaptureAccess()
+        let recording = RyftPermissionStatus.screenRecordingGranted
         let location = RyftPermissionStatus.locationGranted
         if accessibilityGranted != accessibility { accessibilityGranted = accessibility }
         if inputMonitoringGranted != input { inputMonitoringGranted = input }

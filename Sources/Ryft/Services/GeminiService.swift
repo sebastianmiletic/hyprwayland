@@ -46,10 +46,21 @@ final class GeminiService: ObservableObject {
     @Published private(set) var outputTokens = 0
 
     private let keychain = GeminiKeychain()
+    // Highest-capability text-output models are attempted first. A model is
+    // skipped for the rest of the Pacific-time day after its local request cap
+    // is reached or Google returns an unavailable/quota response.
     private let models = [
-        GeminiModel(id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", quota: 500),
-        GeminiModel(id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite", quota: 1_000),
-        GeminiModel(id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", quota: 1_000)
+        GeminiModel(id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", quota: 20),
+        GeminiModel(id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", quota: 20),
+        GeminiModel(id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", quota: 20),
+        GeminiModel(id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", quota: 20),
+        GeminiModel(id: "gemini-3-flash-preview", name: "Gemini 3 Flash", quota: 20),
+        GeminiModel(id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash Lite", quota: 500),
+        GeminiModel(id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash Lite", quota: 500),
+        GeminiModel(id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", quota: 20),
+        GeminiModel(id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite", quota: 20),
+        GeminiModel(id: "gemma-4-31b-it", name: "Gemma 4 31B", quota: 14_400),
+        GeminiModel(id: "gemma-4-26b-it", name: "Gemma 4 26B", quota: 14_400)
     ]
     private var usageCounts: [String: Int] = [:]
     private var usageDate = ""
@@ -199,8 +210,8 @@ final class GeminiService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         let prompt = """
-        Inspect this screenshot and identify the primary question currently visible to the user. Solve it using only what is visible and your general knowledge.
-        If it is multiple choice, reply exactly as CHOICE: followed by one letter from A through E.
+        Inspect this screenshot and identify the primary question currently visible to the user. Read every relevant label and option, solve the question carefully, and silently double-check the result before responding.
+        If it is multiple choice, compare every visible option and reply exactly as CHOICE: followed by one letter from A through E.
         Otherwise reply as ANSWER: followed by one concise answer of at most 16 words.
         If there is no readable question, reply exactly ANSWER: No question found.
         Do not include reasoning, Markdown, or any other text.

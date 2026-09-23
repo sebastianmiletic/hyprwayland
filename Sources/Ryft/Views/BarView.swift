@@ -322,9 +322,9 @@ private struct WidgetView: View {
                 } else {
                     HStack(spacing: 7) {
                         WidgetIcon(value: "sparkle")
-                        Text(model.screenAnswer).lineLimit(1).truncationMode(.tail)
+                        Text(model.screenAnswer).lineLimit(1).truncationMode(.tail).frame(maxWidth: 180, alignment: .leading)
                     }
-                    .foregroundStyle(.white).frame(maxWidth: 380, alignment: .leading)
+                    .foregroundStyle(.white).frame(maxWidth: 205, alignment: .leading).clipped()
                     .transition(.move(edge: .leading).combined(with: .opacity))
                 }
             } else { widgetLabel("Tools").foregroundStyle(.white) }

@@ -284,8 +284,7 @@ struct GeneralSettingsView: View {
                 symbol: "rectangle.on.rectangle",
                 granted: permissions.screenRecordingGranted
             ) {
-                let granted = CGRequestScreenCaptureAccess()
-                model.statusMessage = granted ? "Screen Recording enabled" : "Screen Recording permission unchanged"
+                openPrivacyPane("Privacy_ScreenCapture")
             }
             Text("A red dot beside General remains visible while any permission needs attention. Select Review to open the matching macOS control.")
                 .font(.caption).foregroundStyle(.secondary)

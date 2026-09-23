@@ -47,6 +47,7 @@ final class AppModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var wallpaperScanToken = UUID()
+    private var screenAnswerResetTask: DispatchWorkItem?
     private let configURL: URL
 
     private init() {
@@ -221,6 +222,7 @@ final class AppModel: ObservableObject {
 
     func answerQuestionOnScreen() {
         guard !screenAnswerLoading else { return }
+        screenAnswerResetTask?.cancel()
         screenAnswerLoading = true
         screenAnswer = ""
         screenAnswerIsChoice = false
@@ -230,6 +232,7 @@ final class AppModel: ObservableObject {
             screenAnswerLoading = false
             screenAnswer = String(error.localizedDescription.prefix(140))
             statusMessage = error.localizedDescription
+            scheduleScreenAnswerReset(after: 8)
         case .success(let imageData):
             gemini.answerScreen(imageData: imageData) { [weak self] result in
                 guard let self else { return }
@@ -239,13 +242,25 @@ final class AppModel: ObservableObject {
                     self.screenAnswer = answer.text
                     self.screenAnswerIsChoice = answer.isMultipleChoice
                     self.statusMessage = "Answered from the current screen"
+                    self.scheduleScreenAnswerReset(after: answer.isMultipleChoice ? 3 : 8)
                 case .failure(let error):
                     self.screenAnswer = String(error.localizedDescription.prefix(140))
                     self.screenAnswerIsChoice = false
                     self.statusMessage = error.localizedDescription
+                    self.scheduleScreenAnswerReset(after: 8)
                 }
             }
         }
+    }
+
+    private func scheduleScreenAnswerReset(after delay: TimeInterval) {
+        screenAnswerResetTask?.cancel()
+        let task = DispatchWorkItem { [weak self] in
+            self?.screenAnswer = ""
+            self?.screenAnswerIsChoice = false
+        }
+        screenAnswerResetTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
     }
 
     func save(_ value: RyftConfiguration? = nil) {
