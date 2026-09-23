@@ -218,7 +218,7 @@ struct TilingSettingsView: View {
             SettingsGroup("When Ryft rearranges windows") {
                 Label("One resizable application fills the complete safe work area.", systemImage: "rectangle")
                 Label("Opening a second application smoothly moves and resizes both windows into equal halves.", systemImage: "rectangle.split.2x1")
-                Label("Three or more applications use equal-width and equal-height cells in a balanced grid.", systemImage: "rectangle.split.2x2")
+                Label("A third application splits the right pane into two stacked halves; later apps keep splitting the remaining pane.", systemImage: "rectangle.split.2x2")
                 Label("The bar, Dock, display edges, fullscreen, minimized, and fixed-size windows stay clear.", systemImage: "arrow.down.right.and.arrow.up.left")
                 Label("Closing back to one application restores its original frame.", systemImage: "arrow.uturn.backward")
                 Text("Ryft manages one standard window per visible application on each display and only on the active Mission Control desktop. Every frame stays inside the display, below the Ryft bar, and clear of the Dock. Turn tiling off to restore original frames and stop automatic placement.")

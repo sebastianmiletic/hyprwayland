@@ -3,9 +3,9 @@ import ApplicationServices
 import Combine
 import QuartzCore
 
-/// Ryft-owned automatic Hyprland-style tiling. The engine manages one standard
-/// window per visible application. One application fills the safe work area;
-/// additional applications occupy equal-size cells in a balanced layout.
+/// Ryft-owned automatic Dwindle tiling. The engine manages one standard window
+/// per visible application. One application fills the safe work area; each
+/// additional application splits the remaining pane along its longest axis.
 final class DwindleTilingService: ObservableObject {
     @Published private(set) var running = false
     @Published private(set) var status = "Automatic tiling is off"
@@ -358,33 +358,36 @@ final class DwindleTilingService: ObservableObject {
     private func dwindleFrames(count: Int, in frame: CGRect) -> [CGRect] {
         guard count > 1 else { return [frame.integral] }
         let gap = max(0, min(configuration.gap, 40))
-        let columns = (1...count).min { lhs, rhs in
-            gridScore(columns: lhs, count: count, frame: frame) < gridScore(columns: rhs, count: count, frame: frame)
-        } ?? 1
-        let rows = max(1, Int(ceil(Double(count) / Double(columns))))
-        let cellWidth = floor(max(1, (frame.width - gap * CGFloat(columns - 1)) / CGFloat(columns)))
-        let cellHeight = floor(max(1, (frame.height - gap * CGFloat(rows - 1)) / CGFloat(rows)))
+        var frames: [CGRect] = []
+        var remainder = frame
 
-        return (0..<count).map { index in
-            let row = index / columns
-            let column = index % columns
-            let itemsInRow = min(columns, count - row * columns)
-            let usedWidth = CGFloat(itemsInRow) * cellWidth + CGFloat(max(0, itemsInRow - 1)) * gap
-            let rowOffset = max(0, (frame.width - usedWidth) / 2)
-            return CGRect(
-                x: round(frame.minX + rowOffset + CGFloat(column) * (cellWidth + gap)),
-                y: round(frame.minY + CGFloat(row) * (cellHeight + gap)),
-                width: cellWidth,
-                height: cellHeight
-            )
+        for index in 0..<count {
+            let remaining = count - index
+            if remaining == 1 {
+                frames.append(remainder.integral)
+                break
+            }
+
+            if remainder.width >= remainder.height {
+                let firstWidth = floor((remainder.width - gap) / 2)
+                frames.append(CGRect(x: remainder.minX, y: remainder.minY, width: firstWidth, height: remainder.height).integral)
+                remainder = CGRect(
+                    x: remainder.minX + firstWidth + gap,
+                    y: remainder.minY,
+                    width: remainder.width - firstWidth - gap,
+                    height: remainder.height
+                )
+            } else {
+                let firstHeight = floor((remainder.height - gap) / 2)
+                frames.append(CGRect(x: remainder.minX, y: remainder.minY, width: remainder.width, height: firstHeight).integral)
+                remainder = CGRect(
+                    x: remainder.minX,
+                    y: remainder.minY + firstHeight + gap,
+                    width: remainder.width,
+                    height: remainder.height - firstHeight - gap
+                )
+            }
         }
-    }
-
-    private func gridScore(columns: Int, count: Int, frame: CGRect) -> Double {
-        let rows = max(1, Int(ceil(Double(count) / Double(columns))))
-        let cellAspect = (frame.width / CGFloat(columns)) / max(1, frame.height / CGFloat(rows))
-        let shapePenalty = abs(log(Double(max(0.01, cellAspect))))
-        let emptyCells = columns * rows - count
-        return shapePenalty + Double(emptyCells) * 0.35
+        return frames
     }
 }
