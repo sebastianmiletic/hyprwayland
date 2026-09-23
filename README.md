@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/ryft-logo.png" width="128" alt="Ryft sparkle logo">
+  <img src="docs/assets/ryft-logo.png" width="128" alt="Ryft four-point sparkle logo">
 </p>
 
 # Ryft
@@ -14,14 +14,26 @@
 
 Ryft is a native macOS desktop bar and customization app inspired by Hyprland setups. It runs without a Dock icon, renders a notch-aware multi-display bar, and includes built-in Dwindle tiling, Mission Control workspace controls, live widgets, side panels, a wallpaper library, global shortcuts, Gemini, profiles, and a source-faithful Sebastian II Quickshell preset.
 
-![Ryft desktop](docs/screenshots/ryft-1.png)
+![Ryft desktop with module-island bar](docs/screenshots/bars/module-islands.jpg)
 
 ## Gallery
 
-| Floating bar | Animated Dwindle layout |
+| Controls sidebar | Animated Dwindle layout |
 | --- | --- |
-| ![Ryft bar](docs/screenshots/ryft-4.png) | ![Ryft Dwindle tiling](docs/screenshots/ryft-2.png) |
+| ![Ryft controls sidebar](docs/screenshots/controls.jpg) | ![Ryft Dwindle tiling](docs/screenshots/ryft-2.png) |
 | ![Ryft desktop](docs/screenshots/ryft-5.png) | ![Ryft tiled workspaces](docs/screenshots/ryft-3.png) |
+
+## Bar styles
+
+The same native renderer supports a continuous edge, individual modules, outlines, transparency, and full-width surfaces. Geometry, widgets, colors, and opacity remain independently configurable.
+
+| Solid edge | Outlined modules |
+| --- | --- |
+| ![Solid full-width Ryft bar](docs/screenshots/bars/solid-edge.jpg) | ![Outlined Ryft bar modules](docs/screenshots/bars/outlined.jpg) |
+| **Transparent outline** | **Flush full-width edge** |
+| ![Transparent Ryft bar](docs/screenshots/bars/transparent.jpg) | ![Flush full-width Ryft bar](docs/screenshots/bars/flush-edge.jpg) |
+| **Module islands** | |
+| ![Ryft module-island bar](docs/screenshots/bars/module-islands.jpg) | |
 
 ## Highlights
 

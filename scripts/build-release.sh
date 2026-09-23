@@ -20,6 +20,7 @@ make_app() {
   if [[ "$arch" == universal ]]; then cp "$UNIVERSAL_BIN" "$app/Contents/MacOS/Ryft"; else lipo "$UNIVERSAL_BIN" -thin "$arch" -output "$app/Contents/MacOS/Ryft"; fi
   cp -R "$RESOURCE_BUNDLE" "$app/Contents/Resources/Ryft_Ryft.bundle"
   cp Info.plist "$app/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$app/Contents/Info.plist"
   cp Assets/Ryft.icns "$app/Contents/Resources/Ryft.icns"
   chmod +x "$app/Contents/MacOS/Ryft"
   if security find-identity -v -p codesigning | grep -Fq "\"$SIGNING_IDENTITY\""; then
