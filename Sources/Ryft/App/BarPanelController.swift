@@ -126,7 +126,7 @@ final class BarPanelController {
 
     private func updateMenuBarCover(_ panel: NSPanel, on screen: NSScreen, config: BarConfiguration) {
         guard config.position != .top else { panel.orderOut(nil); return }
-        let height = max(24, screen.safeAreaInsets.top)
+        let height = DisplayLayoutMetrics.menuBarHeight(for: screen)
         panel.setFrame(NSRect(x: screen.frame.minX, y: screen.frame.maxY - height, width: screen.frame.width, height: height), display: true)
         panel.orderFrontRegardless()
     }

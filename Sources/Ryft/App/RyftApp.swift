@@ -36,6 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         let model = AppModel.shared
         _ = model.notifications
+        // Capture the native menu-bar boundary before Ryft hides it. This exact
+        // per-display height is reused by the wallpaper cover and window tiler.
+        NSScreen.screens.forEach { _ = DisplayLayoutMetrics.menuBarHeight(for: $0) }
         barController = BarPanelController(model: model)
         wallpaperController = WallpaperWindowController(model: model)
         sidePanelController = SidePanelController(model: model)
