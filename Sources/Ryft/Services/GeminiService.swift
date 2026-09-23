@@ -34,7 +34,7 @@ private struct GeminiModel {
 /// Requests move through the configured models in order and locally reserve the
 /// same daily quotas (reset at midnight in America/Los_Angeles).
 final class GeminiService: ObservableObject {
-    @Published var messages: [ChatMessage] = [ChatMessage(role: "model", text: "Hi. I’m ready when you are.")]
+    @Published var messages: [ChatMessage] = [ChatMessage(role: "model", text: "• Hi. I’m ready when you are.")]
     @Published var draft = ""
     @Published var isLoading = false
     @Published var errorMessage = ""
@@ -62,7 +62,10 @@ final class GeminiService: ObservableObject {
         GeminiModel(id: "gemma-4-31b-it", name: "Gemma 4 31B", quota: 14_400),
         GeminiModel(id: "gemma-4-26b-it", name: "Gemma 4 26B", quota: 14_400)
     ]
+    private let routerVersion = 2
     private var usageCounts: [String: Int] = [:]
+    private var unavailableModels = Set<String>()
+    private var screenUnavailableModels = Set<String>()
     private var usageDate = ""
     private let usageURL: URL
     private let historyURL: URL
@@ -97,7 +100,7 @@ final class GeminiService: ObservableObject {
 
     func newConversation() {
         requestTask?.cancel(); requestTask = nil; isLoading = false; errorMessage = ""
-        messages = [ChatMessage(role: "model", text: "Hi. I’m ready when you are.")]
+        messages = [ChatMessage(role: "model", text: "• Hi. I’m ready when you are.")]
         saveHistory()
     }
 
@@ -123,7 +126,7 @@ final class GeminiService: ObservableObject {
         hasAPIKey = true
         screenRequestTask?.cancel()
         resetUsageIfNeeded()
-        guard let first = models.firstIndex(where: { usageCounts[$0.id, default: 0] < $0.quota }) else {
+        guard let first = models.firstIndex(where: { usageCounts[$0.id, default: 0] < $0.quota && !unavailableModels.contains($0.id) && !screenUnavailableModels.contains($0.id) }) else {
             completion(.failure(NSError(domain: "Ryft.Gemini", code: 2, userInfo: [NSLocalizedDescriptionKey: "No Gemini model quota is currently available."])))
             return
         }
@@ -136,7 +139,7 @@ final class GeminiService: ObservableObject {
         guard let apiKey = keychain.read() else { hasAPIKey = false; errorMessage = "Add a Gemini API key first."; return }
         hasAPIKey = true; messages.append(ChatMessage(role: "user", text: prompt)); saveHistory(); draft = ""; isLoading = true; errorMessage = ""
         resetUsageIfNeeded()
-        guard let first = models.firstIndex(where: { usageCounts[$0.id, default: 0] < $0.quota }) else {
+        guard let first = models.firstIndex(where: { usageCounts[$0.id, default: 0] < $0.quota && !unavailableModels.contains($0.id) }) else {
             isLoading = false; errorMessage = "No AI model quota is currently available."; return
         }
         request(apiKey: apiKey, modelIndex: first)
@@ -145,9 +148,9 @@ final class GeminiService: ObservableObject {
     private func request(apiKey: String, modelIndex: Int) {
         guard modelIndex < models.count else { isLoading = false; errorMessage = "No AI model quota is currently available."; return }
         let model = models[modelIndex]
-        if usageCounts[model.id, default: 0] >= model.quota { request(apiKey: apiKey, modelIndex: modelIndex + 1); return }
-        reserve(model); currentModelID = model.id
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model.id):generateContent") else { failover(apiKey: apiKey, failed: model, next: modelIndex + 1); return }
+        if usageCounts[model.id, default: 0] >= model.quota || unavailableModels.contains(model.id) { request(apiKey: apiKey, modelIndex: modelIndex + 1); return }
+        currentModelID = model.id
+        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model.id):generateContent") else { unavailableModels.insert(model.id); failover(apiKey: apiKey, next: modelIndex + 1); return }
         var request = URLRequest(url: url); request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
@@ -155,7 +158,7 @@ final class GeminiService: ObservableObject {
         let payload: [String: Any] = [
             "contents": Array(history),
             "system_instruction": ["parts": [["text": systemPrompt]]],
-            "generationConfig": ["temperature": 0.5]
+            "generationConfig": ["temperature": 0.0]
         ]
         do { request.httpBody = try JSONSerialization.data(withJSONObject: payload) }
         catch { isLoading = false; errorMessage = error.localizedDescription; return }
@@ -171,19 +174,21 @@ final class GeminiService: ObservableObject {
                     self.isLoading = false; self.errorMessage = self.apiError(json) ?? "The Gemini API key was rejected."; return
                 }
                 if status == 404 || status == 429 || !(200..<300).contains(status) {
-                    self.failover(apiKey: apiKey, failed: model, next: modelIndex + 1, finalMessage: self.apiError(json)); return
+                    self.recordFailure(model, status: status)
+                    self.failover(apiKey: apiKey, next: modelIndex + 1, finalMessage: self.apiError(json)); return
                 }
                 guard let candidates = json?["candidates"] as? [[String: Any]],
                       let content = candidates.first?["content"] as? [String: Any],
                       let parts = content["parts"] as? [[String: Any]],
                       let text = parts.compactMap({ $0["text"] as? String }).joined().nilIfEmpty else {
-                    self.failover(apiKey: apiKey, failed: model, next: modelIndex + 1, finalMessage: self.apiError(json)); return
+                    self.failover(apiKey: apiKey, next: modelIndex + 1, finalMessage: self.apiError(json)); return
                 }
                 if let usage = json?["usageMetadata"] as? [String: Any] {
                     self.inputTokens = usage["promptTokenCount"] as? Int ?? 0
                     self.outputTokens = usage["candidatesTokenCount"] as? Int ?? 0
                 }
-                self.messages.append(ChatMessage(role: "model", text: self.humanize(text), model: model.id)); self.isLoading = false; self.errorMessage = ""; self.saveHistory()
+                self.reserve(model)
+                self.messages.append(ChatMessage(role: "model", text: self.bulletize(text), model: model.id)); self.isLoading = false; self.errorMessage = ""; self.saveHistory()
             }
         }
         requestTask?.resume()
@@ -195,11 +200,11 @@ final class GeminiService: ObservableObject {
             return
         }
         let model = models[modelIndex]
-        if usageCounts[model.id, default: 0] >= model.quota {
+        if usageCounts[model.id, default: 0] >= model.quota || unavailableModels.contains(model.id) || screenUnavailableModels.contains(model.id) {
             requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, completion: completion)
             return
         }
-        reserve(model); currentModelID = model.id
+        currentModelID = model.id
         guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model.id):generateContent") else {
             completion(.failure(NSError(domain: "Ryft.Gemini", code: 4, userInfo: [NSLocalizedDescriptionKey: "Could not create the Gemini request."])))
             return
@@ -221,7 +226,7 @@ final class GeminiService: ObservableObject {
                 ["text": prompt],
                 ["inline_data": ["mime_type": "image/jpeg", "data": imageData.base64EncodedString()]]
             ]]],
-            "generationConfig": ["temperature": 0.1, "maxOutputTokens": 80]
+            "generationConfig": ["temperature": 0.0, "maxOutputTokens": 80]
         ]
         do { request.httpBody = try JSONSerialization.data(withJSONObject: payload) }
         catch { completion(.failure(error)); return }
@@ -242,7 +247,7 @@ final class GeminiService: ObservableObject {
                       let content = candidates.first?["content"] as? [String: Any],
                       let parts = content["parts"] as? [[String: Any]],
                       let raw = parts.compactMap({ $0["text"] as? String }).joined().nilIfEmpty else {
-                    self.usageCounts[model.id] = model.quota; self.saveUsage()
+                    self.recordFailure(model, status: status, screenOnly: status == 200 || ((400..<500).contains(status) && status != 404 && status != 429))
                     if modelIndex + 1 < self.models.count {
                         self.requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, completion: completion)
                     } else {
@@ -250,6 +255,7 @@ final class GeminiService: ObservableObject {
                     }
                     return
                 }
+                self.reserve(model)
                 completion(.success(self.parseScreenAnswer(raw)))
             }
         }
@@ -257,38 +263,70 @@ final class GeminiService: ObservableObject {
     }
 
     private func parseScreenAnswer(_ raw: String) -> GeminiScreenAnswer {
-        let clean = humanize(raw).replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        if clean.uppercased().hasPrefix("CHOICE:") {
-            let value = clean.dropFirst("CHOICE:".count).trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            let letter = value.first.map(String.init) ?? "?"
-            return GeminiScreenAnswer(text: letter, isMultipleChoice: true)
+        let clean = plainText(raw).replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let upper = clean.uppercased()
+        if let match = upper.range(of: #"\bCHOICE\s*[:\-]?\s*([A-E])\b"#, options: .regularExpression) {
+            let choice = upper[match].last(where: { ("A"..."E").contains(String($0)) }).map(String.init) ?? ""
+            if !choice.isEmpty { return GeminiScreenAnswer(text: choice, isMultipleChoice: true) }
         }
-        let answer = clean.uppercased().hasPrefix("ANSWER:") ? String(clean.dropFirst("ANSWER:".count)).trimmingCharacters(in: .whitespacesAndNewlines) : clean
+        if upper.count == 1, ("A"..."E").contains(upper) {
+            return GeminiScreenAnswer(text: upper, isMultipleChoice: true)
+        }
+        let answer: String
+        if let marker = upper.range(of: "ANSWER:") {
+            answer = String(clean[marker.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            answer = clean.trimmingCharacters(in: CharacterSet(charactersIn: "•- "))
+        }
         return GeminiScreenAnswer(text: String(answer.prefix(140)), isMultipleChoice: false)
     }
 
-    private func failover(apiKey: String, failed: GeminiModel, next: Int, finalMessage: String? = nil) {
-        usageCounts[failed.id] = failed.quota; saveUsage()
+    private func failover(apiKey: String, next: Int, finalMessage: String? = nil) {
         if next < models.count { request(apiKey: apiKey, modelIndex: next) }
         else { isLoading = false; errorMessage = finalMessage ?? "No AI model quota is currently available." }
+    }
+
+    private func recordFailure(_ model: GeminiModel, status: Int, screenOnly: Bool = false) {
+        if status == 429 { usageCounts[model.id] = model.quota }
+        else if status == 404 { unavailableModels.insert(model.id) }
+        else if screenOnly { screenUnavailableModels.insert(model.id) }
+        else if (400..<500).contains(status) { unavailableModels.insert(model.id) }
+        saveUsage()
     }
 
     private func reserve(_ model: GeminiModel) { usageCounts[model.id, default: 0] += 1; saveUsage() }
 
     private func resetUsageIfNeeded() {
         let today = Self.today
-        if usageDate != today { usageDate = today; usageCounts = [:]; saveUsage() }
+        if usageDate != today {
+            usageDate = today; usageCounts = [:]; unavailableModels = []; screenUnavailableModels = []; saveUsage()
+        }
     }
 
     private func loadUsage() {
-        if let data = try? Data(contentsOf: usageURL), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any], object["date"] as? String == Self.today {
-            usageDate = Self.today; usageCounts = object["counts"] as? [String: Int] ?? [:]
-        } else { usageDate = Self.today; usageCounts = [:] }
+        if let data = try? Data(contentsOf: usageURL),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           object["date"] as? String == Self.today,
+           object["routerVersion"] as? Int == routerVersion {
+            usageDate = Self.today
+            usageCounts = object["counts"] as? [String: Int] ?? [:]
+            unavailableModels = Set(object["unavailable"] as? [String] ?? [])
+            screenUnavailableModels = Set(object["screenUnavailable"] as? [String] ?? [])
+        } else {
+            usageDate = Self.today; usageCounts = [:]; unavailableModels = []; screenUnavailableModels = []
+            saveUsage()
+        }
         publishUsage()
     }
 
     private func saveUsage() {
-        let object: [String: Any] = ["date": usageDate, "counts": usageCounts]
+        let object: [String: Any] = [
+            "routerVersion": routerVersion,
+            "date": usageDate,
+            "counts": usageCounts,
+            "unavailable": Array(unavailableModels).sorted(),
+            "screenUnavailable": Array(screenUnavailableModels).sorted()
+        ]
         if let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]) { try? data.write(to: usageURL, options: .atomic) }
         publishUsage()
     }
@@ -297,7 +335,9 @@ final class GeminiService: ObservableObject {
 
     private func loadHistory() {
         guard let data = try? Data(contentsOf: historyURL), let saved = try? JSONDecoder().decode([ChatMessage].self, from: data), !saved.isEmpty else { return }
-        messages = Array(saved.suffix(80))
+        messages = Array(saved.suffix(80)).map { message in
+            message.role == "model" ? ChatMessage(id: message.id, role: message.role, text: bulletize(message.text), model: message.model) : message
+        }
     }
 
     private func saveHistory() {
@@ -306,35 +346,46 @@ final class GeminiService: ObservableObject {
     }
 
     private func apiError(_ json: [String: Any]?) -> String? { (json?["error"] as? [String: Any])?["message"] as? String }
-    private func humanize(_ text: String) -> String { text.replacingOccurrences(of: "$", with: "").replacingOccurrences(of: #"\\\(|\\\)|\\\[|\\\]"#, with: "", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func plainText(_ text: String) -> String {
+        text.replacingOccurrences(of: "$", with: "")
+            .replacingOccurrences(of: #"\\\(|\\\)|\\\[|\\\]"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+            .replacingOccurrences(of: "`", with: "")
+            .replacingOccurrences(of: "#", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func bulletize(_ text: String) -> String {
+        var lines = plainText(text).components(separatedBy: .newlines).compactMap { raw -> String? in
+            var line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { return nil }
+            line = line.replacingOccurrences(of: #"^(?:[•*\-]|\d+[.)])\s*"#, with: "", options: .regularExpression)
+            line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return line.isEmpty ? nil : "• \(line)"
+        }
+        if lines.isEmpty { lines = ["• No answer was returned."] }
+        return lines.joined(separator: "\n")
+    }
 
     private var systemPrompt: String {
         let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Unknown"
         let date = Date().formatted(date: .abbreviated, time: .shortened)
         return """
-        ## Style
-        - Use casual tone, don't be formal!
-        - Always be brief and to the point, unless asked otherwise
-        - Don't repeat the user's question
-        - Be approachable: Avoid using overly complicated, domain-specific terms and provide analogies when asked to explain a concept
+        You are a concise macOS sidebar assistant.
+        Current date and time: \(date)
+        Focused app: \(app)
 
-        ## Context (ignore when irrelevant)
-        - You are a helpful and inspiring sidebar assistant on a macOS system
-        - Desktop environment: macOS (Aqua)
-        - Current date & time: \(date)
-        - Focused app: \(app)
-
-        ## Presentation
-        - Use Markdown features in your response:
-          - **Bold** text to **highlight keywords** in your response
-          - **Split long information into small sections** with h2 headers and a relevant emoji at the start of it (for example `## 🐧 Linux`). Bullet points are preferred over long paragraphs, unless you're offering writing support or instructed otherwise by the user.
-        - Asked to compare different options? You should firstly use a table to compare the main aspects, then elaborate or include relevant comments from online forums *after* the table. Make sure to provide a final recommendation for the user's use case!
-        - Use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX '$$' delimiters. NEVER generate LaTeX code in a latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular documents (resumes, letters, essays, CVs, etc.).
-
-        Thanks!
-
-        ## Non-negotiable output rules
-        Write in clean, natural, human-readable language. Never use emojis, emoticons, kaomoji, or decorative pictographs. Never use dollar signs as LaTeX delimiters or terminal prompts. Write mathematics as ordinary text with readable Unicode symbols, and show commands without a leading prompt character.
+        Non-negotiable response rules:
+        - Return only concise dot points.
+        - Begin every line with the bullet character • followed by one space.
+        - Use one fact or action per line.
+        - Never use Markdown, asterisks, hashes, headings, tables, emphasis markers, code fences, emojis, or decorative symbols.
+        - Never repeat the user's question.
+        - Prefer the direct answer first, then only essential supporting points.
+        - Write mathematics with readable Unicode characters instead of LaTeX delimiters.
+        - Keep simple answers to one dot point and longer answers brief.
         """
     }
 

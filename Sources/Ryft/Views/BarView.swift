@@ -194,6 +194,22 @@ private struct WidgetZoneDropDelegate: DropDelegate {
     }
 }
 
+private struct PulsingSparkle: View {
+    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+            let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.2) / 1.2
+            let pulse = (sin(phase * .pi * 2) + 1) / 2
+            Image(systemName: "sparkle")
+                .font(.system(size: 14, weight: .semibold))
+                .scaleEffect(reduceMotion ? 1 : 0.88 + pulse * 0.14)
+                .opacity(reduceMotion ? 1 : 0.58 + pulse * 0.42)
+                .frame(width: 20, height: 20)
+        }
+        .accessibilityLabel("Gemini is reading the screen")
+    }
+}
+
 private struct BatteryGaugeIcon: View {
     let level: Int
     let charging: Bool
@@ -313,8 +329,8 @@ private struct WidgetView: View {
             }
         case .leftSidebar:
             if model.screenAnswerLoading {
-                ProgressView().controlSize(.small).frame(minWidth: 18, minHeight: 18).tint(.white)
-                    .transition(.scale(scale: 0.75).combined(with: .opacity))
+                PulsingSparkle().foregroundStyle(.white)
+                    .transition(.scale(scale: 0.82).combined(with: .opacity))
             } else if !model.screenAnswer.isEmpty {
                 if model.screenAnswerIsChoice {
                     Text(model.screenAnswer).font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.white)
