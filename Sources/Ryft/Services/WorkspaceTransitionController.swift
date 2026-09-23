@@ -10,6 +10,7 @@ final class WorkspaceTransitionController {
 
     func perform(direction: Int, switchAction: () -> Bool) -> Bool {
         guard CGPreflightScreenCaptureAccess() else { return false }
+        cleanup()
         let restoreCursor = CursorThemeService.shared.enabled
         if restoreCursor { CursorThemeService.shared.suspendOverlay() }
         defer { if restoreCursor { CursorThemeService.shared.resumeOverlay() } }
@@ -19,7 +20,6 @@ final class WorkspaceTransitionController {
             return (screen, image)
         }
         guard captures.count == NSScreen.screens.count, !captures.isEmpty else { return false }
-        cleanup()
         let id = UUID(); transitionID = id
         panels = captures.map { screen, image in makePanel(screen: screen, image: image) }
         panels.forEach { $0.orderFrontRegardless() }
