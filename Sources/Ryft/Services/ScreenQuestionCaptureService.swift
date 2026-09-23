@@ -10,31 +10,42 @@ enum ScreenQuestionCaptureService {
         // Do not call CGRequestScreenCaptureAccess here. Command+M should never
         // repeat a system prompt when TCC already has a decision. A direct,
         // non-interactive capture also recovers when preflight is briefly stale.
-        guard let displayID = focusedDisplayID(),
-              let image = CGDisplayCreateImage(displayID) else {
+        guard let image = focusedWindowImage() ?? focusedDisplayID().flatMap({ CGDisplayCreateImage($0) }) else {
             UserDefaults.standard.set(false, forKey: "RyftVerifiedScreenRecording")
             let message = CGPreflightScreenCaptureAccess()
                 ? "Ryft could not capture the current display."
                 : "Review Screen Recording in General Settings, then press Command+M again."
             return .failure(NSError(domain: "Ryft.ScreenCapture", code: 1, userInfo: [NSLocalizedDescriptionKey: message]))
         }
-        guard let data = jpegData(from: image, maximumDimension: 1_800) else {
+        guard let data = jpegData(from: image, maximumDimension: 2_880) else {
             return .failure(NSError(domain: "Ryft.ScreenCapture", code: 2, userInfo: [NSLocalizedDescriptionKey: "Ryft could not encode the current display."]))
         }
         UserDefaults.standard.set(true, forKey: "RyftVerifiedScreenRecording")
         return .success(data)
     }
 
+    private static func focusedWindowInfo() -> [CFString: Any]? {
+        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+              let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[CFString: Any]] else { return nil }
+        return windows.first(where: { info in
+            guard (info[kCGWindowOwnerPID] as? NSNumber)?.int32Value == pid,
+                  (info[kCGWindowLayer] as? NSNumber)?.intValue == 0,
+                  let bounds = info[kCGWindowBounds] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds) else { return false }
+            return frame.width >= 160 && frame.height >= 120
+        })
+    }
+
+    private static func focusedWindowImage() -> CGImage? {
+        guard let info = focusedWindowInfo(),
+              let number = (info[kCGWindowNumber] as? NSNumber)?.uint32Value else { return nil }
+        return CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(number), [.boundsIgnoreFraming, .bestResolution])
+    }
+
     private static func focusedDisplayID() -> CGDirectDisplayID? {
-        if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
-           let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[CFString: Any]],
-           let window = windows
-            .filter({ ($0[kCGWindowOwnerPID] as? NSNumber)?.int32Value == pid && ($0[kCGWindowLayer] as? NSNumber)?.intValue == 0 })
-            .compactMap({ info -> CGRect? in
-                guard let bounds = info[kCGWindowBounds] as? NSDictionary else { return nil }
-                return CGRect(dictionaryRepresentation: bounds)
-            })
-            .max(by: { $0.width * $0.height < $1.width * $1.height }) {
+        if let info = focusedWindowInfo(),
+           let bounds = info[kCGWindowBounds] as? NSDictionary,
+           let window = CGRect(dictionaryRepresentation: bounds) {
             var display = CGDirectDisplayID()
             var count: UInt32 = 0
             if CGGetDisplaysWithPoint(CGPoint(x: window.midX, y: window.midY), 1, &display, &count) == .success, count > 0 { return display }
@@ -63,7 +74,7 @@ enum ScreenQuestionCaptureService {
         guard let resized = context.makeImage() else { return nil }
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, resized, [kCGImageDestinationLossyCompressionQuality: 0.78] as CFDictionary)
+        CGImageDestinationAddImage(destination, resized, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return nil }
         return data as Data
     }
