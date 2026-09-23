@@ -31,6 +31,9 @@ final class AppModel: ObservableObject {
     @Published var statusPopoverInteractionID: UUID? = nil
     @Published var statusPopoverDetail = ""
     @Published var statusMessage = "Ready"
+    @Published var screenAnswer = ""
+    @Published var screenAnswerIsChoice = false
+    @Published var screenAnswerLoading = false
     @Published var wallpaperArchiveStatus = ""
     @Published var installingWallpaperArchive = false
     let system = SystemMonitor()
@@ -214,6 +217,35 @@ final class AppModel: ObservableObject {
             object["shortcuts"] = shortcuts.filter { supported.contains($0["action"] as? String ?? "") }
         }
         return try? JSONSerialization.data(withJSONObject: object)
+    }
+
+    func answerQuestionOnScreen() {
+        guard !screenAnswerLoading else { return }
+        screenAnswerLoading = true
+        screenAnswer = ""
+        screenAnswerIsChoice = false
+        statusMessage = "Reading the current screen…"
+        switch ScreenQuestionCaptureService.capture() {
+        case .failure(let error):
+            screenAnswerLoading = false
+            screenAnswer = String(error.localizedDescription.prefix(140))
+            statusMessage = error.localizedDescription
+        case .success(let imageData):
+            gemini.answerScreen(imageData: imageData) { [weak self] result in
+                guard let self else { return }
+                self.screenAnswerLoading = false
+                switch result {
+                case .success(let answer):
+                    self.screenAnswer = answer.text
+                    self.screenAnswerIsChoice = answer.isMultipleChoice
+                    self.statusMessage = "Answered from the current screen"
+                case .failure(let error):
+                    self.screenAnswer = String(error.localizedDescription.prefix(140))
+                    self.screenAnswerIsChoice = false
+                    self.statusMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     func save(_ value: RyftConfiguration? = nil) {

@@ -52,22 +52,27 @@ final class GlobalHotkeyManager {
     }
 
     func register(_ shortcuts: [ShortcutConfiguration]) {
-        clear(); polledShortcuts = shortcuts
+        clear()
+        let screenAnswerShortcut = ShortcutConfiguration(action: .screenAnswer, key: "m", option: false, command: true)
+        polledShortcuts = [screenAnswerShortcut] + shortcuts.filter {
+            !(Self.keyCodes[$0.key.lowercased()] == 46 && $0.command && !$0.option && !$0.control && !$0.shift)
+        }
         var combinations = Set<String>()
         // Core entry points are registered directly with the macOS event
         // dispatcher. They do not depend on the settings window, app focus, or
         // the editable keybind list.
-        let fixed: [(UInt32, ShortcutAction, String, Int)] = [
-            (2002, .leftSidebar, "a", 0), (2003, .rightSidebar, "n", 45)
+        let fixed: [(UInt32, ShortcutConfiguration, Int, UInt32)] = [
+            (2002, ShortcutConfiguration(action: .leftSidebar, key: "a"), 0, UInt32(optionKey)),
+            (2003, ShortcutConfiguration(action: .rightSidebar, key: "n"), 45, UInt32(optionKey)),
+            (2004, screenAnswerShortcut, 46, UInt32(cmdKey))
         ]
-        for (idValue, action, key, code) in fixed {
-            let shortcut = ShortcutConfiguration(action: action, key: key)
+        for (idValue, shortcut, code, modifiers) in fixed {
             var ref: EventHotKeyRef?
             let id = EventHotKeyID(signature: Self.signature, id: idValue)
-            let status = RegisterEventHotKey(UInt32(code), UInt32(optionKey), id, GetEventDispatcherTarget(), 0, &ref)
+            let status = RegisterEventHotKey(UInt32(code), modifiers, id, GetEventDispatcherTarget(), 0, &ref)
             if status == noErr, let ref { refs.append(ref); systemShortcuts[idValue] = shortcut; NSLog("Ryft registered system-wide shortcut %@", shortcut.display) }
             else { NSLog("Ryft could not register system-wide shortcut %@ (OSStatus %d)", shortcut.display, status) }
-            combinations.insert("\(code)-\(UInt32(optionKey))")
+            combinations.insert("\(code)-\(modifiers)")
         }
         // Workspace navigation is intentionally fixed and global, matching the
         // desktop labels in the bar. Carbon hotkeys need no Accessibility or

@@ -21,7 +21,7 @@ struct PermissionsSettingsView: View {
                     WorkspaceController.requestAccessibility()
                 }
                 Divider()
-                permissionRow("Input Monitoring", detail: "Makes Option+A, Option+N, and desktop shortcuts work in every app.", symbol: "keyboard", status: CGPreflightListenEventAccess() ? "Allowed" : "Not allowed", granted: CGPreflightListenEventAccess()) {
+                permissionRow("Input Monitoring", detail: "Makes Option+A, Option+N, Command+M, and desktop shortcuts work in every app.", symbol: "keyboard", status: CGPreflightListenEventAccess() ? "Allowed" : "Not allowed", granted: CGPreflightListenEventAccess()) {
                     _ = CGRequestListenEventAccess()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { model.statusMessage = "Permission status refreshed" }
                 }
@@ -36,7 +36,7 @@ struct PermissionsSettingsView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { model.statusMessage = "Permission status refreshed" }
                 }
                 Divider()
-                permissionRow("Screen Recording", detail: "Captures one temporary frame for Ryft’s optional workspace slide. Frames stay in memory and are discarded immediately.", symbol: "rectangle.on.rectangle", status: CGPreflightScreenCaptureAccess() ? "Allowed" : "Not allowed", granted: CGPreflightScreenCaptureAccess()) {
+                permissionRow("Screen Recording", detail: "Captures a temporary in-memory frame for workspace slides or Command+M visual answers. Frames are never saved.", symbol: "rectangle.on.rectangle", status: CGPreflightScreenCaptureAccess() ? "Allowed" : "Not allowed", granted: CGPreflightScreenCaptureAccess()) {
                     let granted = CGRequestScreenCaptureAccess()
                     model.statusMessage = granted ? "Screen Recording enabled" : "Screen Recording permission unchanged"
                 }
@@ -110,6 +110,7 @@ struct QuickStartSettingsView: View {
                 }
             }
             SettingsGroup("Useful keys") {
+                LabeledContent("Answer visible question", value: "Command + M")
                 LabeledContent("Switch desktops", value: "Option + 1–9")
                 LabeledContent("Open Finder", value: "Command + E")
                 LabeledContent("Close a panel", value: "Escape")

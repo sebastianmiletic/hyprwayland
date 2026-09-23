@@ -36,6 +36,8 @@ struct BarView: View {
         }
         .font(.system(size: 12.5, weight: .medium, design: .rounded))
         .foregroundStyle(Color(hex: palette.foreground))
+        .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.22), value: model.screenAnswer)
+        .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.16), value: model.screenAnswerLoading)
     }
 
     private func horizontalBar(in size: CGSize) -> some View {
@@ -309,7 +311,23 @@ private struct WidgetView: View {
                     }.monospacedDigit()
                 } else { widgetLabel(context.date.formatted(date: .abbreviated, time: .shortened)).monospacedDigit() }
             }
-        case .leftSidebar: widgetLabel("Tools").foregroundStyle(.white)
+        case .leftSidebar:
+            if model.screenAnswerLoading {
+                ProgressView().controlSize(.small).frame(minWidth: 18, minHeight: 18).tint(.white)
+                    .transition(.scale(scale: 0.75).combined(with: .opacity))
+            } else if !model.screenAnswer.isEmpty {
+                if model.screenAnswerIsChoice {
+                    Text(model.screenAnswer).font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                        .frame(minWidth: 18).transition(.scale(scale: 0.72).combined(with: .opacity))
+                } else {
+                    HStack(spacing: 7) {
+                        WidgetIcon(value: "sparkle")
+                        Text(model.screenAnswer).lineLimit(1).truncationMode(.tail)
+                    }
+                    .foregroundStyle(.white).frame(maxWidth: 380, alignment: .leading)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+            } else { widgetLabel("Tools").foregroundStyle(.white) }
         case .wallpaper: widgetLabel("Wallpapers")
         case .activeApp: widgetLabel(system.activeApp)
         case .wifi: widgetLabel(system.wifi)

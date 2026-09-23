@@ -199,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? process.run()
         case .leftSidebar: sidePanelController?.toggleLeft()
         case .rightSidebar: sidePanelController?.toggleRight()
+        case .screenAnswer: model.answerQuestionOnScreen()
         case .quitFrontmost:
             guard let app = NSWorkspace.shared.frontmostApplication else { return }
             if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { NSApp.terminate(nil) }

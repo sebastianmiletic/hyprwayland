@@ -11,6 +11,11 @@ struct ChatMessage: Identifiable, Equatable, Codable {
     init(id: UUID = UUID(), role: String, text: String, model: String? = nil) { self.id = id; self.role = role; self.text = text; self.model = model }
 }
 
+struct GeminiScreenAnswer {
+    let text: String
+    let isMultipleChoice: Bool
+}
+
 struct GeminiModelUsage: Identifiable {
     let id: String
     let name: String
@@ -42,18 +47,16 @@ final class GeminiService: ObservableObject {
 
     private let keychain = GeminiKeychain()
     private let models = [
-        GeminiModel(id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash Lite", quota: 500),
-        GeminiModel(id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash Lite", quota: 500),
-        GeminiModel(id: "gemma-4-31b-it", name: "Gemma 4 31B", quota: 14_400),
-        GeminiModel(id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", quota: 20),
-        GeminiModel(id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", quota: 20),
-        GeminiModel(id: "gemini-3-flash-preview", name: "Gemini 3 Flash", quota: 20)
+        GeminiModel(id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", quota: 500),
+        GeminiModel(id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite", quota: 1_000),
+        GeminiModel(id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", quota: 1_000)
     ]
     private var usageCounts: [String: Int] = [:]
     private var usageDate = ""
     private let usageURL: URL
     private let historyURL: URL
     private var requestTask: URLSessionDataTask?
+    private var screenRequestTask: URLSessionDataTask?
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Ryft", isDirectory: true)
@@ -98,6 +101,22 @@ final class GeminiService: ObservableObject {
 
     func openAIStudio() {
         if let url = URL(string: "https://aistudio.google.com/app/apikey") { NSWorkspace.shared.open(url) }
+    }
+
+    func answerScreen(imageData: Data, completion: @escaping (Result<GeminiScreenAnswer, Error>) -> Void) {
+        guard let apiKey = keychain.read() else {
+            hasAPIKey = false
+            completion(.failure(NSError(domain: "Ryft.Gemini", code: 1, userInfo: [NSLocalizedDescriptionKey: "Add a Gemini API key in the Assistant settings first."])))
+            return
+        }
+        hasAPIKey = true
+        screenRequestTask?.cancel()
+        resetUsageIfNeeded()
+        guard let first = models.firstIndex(where: { usageCounts[$0.id, default: 0] < $0.quota }) else {
+            completion(.failure(NSError(domain: "Ryft.Gemini", code: 2, userInfo: [NSLocalizedDescriptionKey: "No Gemini model quota is currently available."])))
+            return
+        }
+        requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: first, completion: completion)
     }
 
     func send() {
@@ -157,6 +176,84 @@ final class GeminiService: ObservableObject {
             }
         }
         requestTask?.resume()
+    }
+
+    private func requestScreen(imageData: Data, apiKey: String, modelIndex: Int, completion: @escaping (Result<GeminiScreenAnswer, Error>) -> Void) {
+        guard modelIndex < models.count else {
+            completion(.failure(NSError(domain: "Ryft.Gemini", code: 3, userInfo: [NSLocalizedDescriptionKey: "Gemini could not answer from the current screen."])))
+            return
+        }
+        let model = models[modelIndex]
+        if usageCounts[model.id, default: 0] >= model.quota {
+            requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, completion: completion)
+            return
+        }
+        reserve(model); currentModelID = model.id
+        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model.id):generateContent") else {
+            completion(.failure(NSError(domain: "Ryft.Gemini", code: 4, userInfo: [NSLocalizedDescriptionKey: "Could not create the Gemini request."])))
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 35
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        let prompt = """
+        Inspect this screenshot and identify the primary question currently visible to the user. Solve it using only what is visible and your general knowledge.
+        If it is multiple choice, reply exactly as CHOICE: followed by one letter from A through E.
+        Otherwise reply as ANSWER: followed by one concise answer of at most 16 words.
+        If there is no readable question, reply exactly ANSWER: No question found.
+        Do not include reasoning, Markdown, or any other text.
+        """
+        let payload: [String: Any] = [
+            "contents": [["role": "user", "parts": [
+                ["text": prompt],
+                ["inline_data": ["mime_type": "image/jpeg", "data": imageData.base64EncodedString()]]
+            ]]],
+            "generationConfig": ["temperature": 0.1, "maxOutputTokens": 80]
+        ]
+        do { request.httpBody = try JSONSerialization.data(withJSONObject: payload) }
+        catch { completion(.failure(error)); return }
+        screenRequestTask = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.screenRequestTask = nil
+                if let urlError = error as? URLError, urlError.code == .cancelled { return }
+                if let error { completion(.failure(error)); return }
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+                if status == 401 || status == 403 {
+                    completion(.failure(NSError(domain: "Ryft.Gemini", code: status, userInfo: [NSLocalizedDescriptionKey: self.apiError(json) ?? "The Gemini API key was rejected."])))
+                    return
+                }
+                guard (200..<300).contains(status),
+                      let candidates = json?["candidates"] as? [[String: Any]],
+                      let content = candidates.first?["content"] as? [String: Any],
+                      let parts = content["parts"] as? [[String: Any]],
+                      let raw = parts.compactMap({ $0["text"] as? String }).joined().nilIfEmpty else {
+                    self.usageCounts[model.id] = model.quota; self.saveUsage()
+                    if modelIndex + 1 < self.models.count {
+                        self.requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, completion: completion)
+                    } else {
+                        completion(.failure(NSError(domain: "Ryft.Gemini", code: status, userInfo: [NSLocalizedDescriptionKey: self.apiError(json) ?? "Gemini could not read the visible question."])))
+                    }
+                    return
+                }
+                completion(.success(self.parseScreenAnswer(raw)))
+            }
+        }
+        screenRequestTask?.resume()
+    }
+
+    private func parseScreenAnswer(_ raw: String) -> GeminiScreenAnswer {
+        let clean = humanize(raw).replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.uppercased().hasPrefix("CHOICE:") {
+            let value = clean.dropFirst("CHOICE:".count).trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            let letter = value.first.map(String.init) ?? "?"
+            return GeminiScreenAnswer(text: letter, isMultipleChoice: true)
+        }
+        let answer = clean.uppercased().hasPrefix("ANSWER:") ? String(clean.dropFirst("ANSWER:".count)).trimmingCharacters(in: .whitespacesAndNewlines) : clean
+        return GeminiScreenAnswer(text: String(answer.prefix(140)), isMultipleChoice: false)
     }
 
     private func failover(apiKey: String, failed: GeminiModel, next: Int, finalMessage: String? = nil) {

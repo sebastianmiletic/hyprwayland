@@ -12,7 +12,7 @@ struct ShortcutSettingsView: View {
             ForEach(Array(model.configuration.shortcuts.indices), id: \.self) { index in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Picker("Action", selection: $model.configuration.shortcuts[index].action) { ForEach(ShortcutAction.allCases.filter { $0 != .wallpaper && $0 != .randomWallpaper }) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 170)
+                        Picker("Action", selection: $model.configuration.shortcuts[index].action) { ForEach(ShortcutAction.allCases.filter { $0 != .wallpaper && $0 != .randomWallpaper && $0 != .screenAnswer }) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 170)
                         modifier("⌃", value: $model.configuration.shortcuts[index].control)
                         modifier("⌥", value: $model.configuration.shortcuts[index].option)
                         modifier("⇧", value: $model.configuration.shortcuts[index].shift)
@@ -59,6 +59,7 @@ struct ShortcutSettingsView: View {
             if let command = shortcut.target, !command.isEmpty { let process = Process(); process.executableURL = URL(fileURLWithPath: "/bin/zsh"); process.arguments = ["-lc", command]; try? process.run() }
         case .leftSidebar: NotificationCenter.default.post(name: .ryftToggleLeftSidebar, object: nil)
         case .rightSidebar: NotificationCenter.default.post(name: .ryftToggleRightSidebar, object: nil)
+        case .screenAnswer: model.answerQuestionOnScreen()
         case .quitFrontmost: _ = NSWorkspace.shared.frontmostApplication?.terminate()
         }
     }
@@ -251,7 +252,7 @@ struct GeneralSettingsView: View {
             Divider()
             permissionRow(
                 "Input Monitoring",
-                detail: "Global Option+A, Option+N, and desktop shortcuts.",
+                detail: "Global Option+A, Option+N, Command+M, and desktop shortcuts.",
                 symbol: "keyboard",
                 granted: permissions.inputMonitoringGranted
             ) { openPrivacyPane("Privacy_ListenEvent") }
@@ -279,7 +280,7 @@ struct GeneralSettingsView: View {
             Divider()
             permissionRow(
                 "Screen Recording",
-                detail: "Temporary in-memory frames for the optional workspace slide.",
+                detail: "Temporary in-memory frames for workspace slides and Command+M visual answers.",
                 symbol: "rectangle.on.rectangle",
                 granted: permissions.screenRecordingGranted
             ) {

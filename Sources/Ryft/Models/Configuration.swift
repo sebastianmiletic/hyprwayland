@@ -274,7 +274,7 @@ extension BarConfiguration {
 }
 
 enum ShortcutAction: String, Codable, CaseIterable, Identifiable {
-    case wallpaper = "Wallpaper gallery", toggleBar = "Toggle bar", settings = "Open settings", randomWallpaper = "Random wallpaper", openFinder = "Open Finder", openApplication = "Open application", runCommand = "Run command", leftSidebar = "Open AI sidebar", rightSidebar = "Open control sidebar", quitFrontmost = "Quit frontmost app"
+    case wallpaper = "Wallpaper gallery", toggleBar = "Toggle bar", settings = "Open settings", randomWallpaper = "Random wallpaper", openFinder = "Open Finder", openApplication = "Open application", runCommand = "Run command", leftSidebar = "Open AI sidebar", rightSidebar = "Open control sidebar", screenAnswer = "Answer visible question", quitFrontmost = "Quit frontmost app"
     var id: String { rawValue }
 }
 
