@@ -3,9 +3,9 @@ import ApplicationServices
 import Combine
 import QuartzCore
 
-/// Ryft-owned automatic Dwindle tiling. The engine intentionally manages one
-/// standard window per visible application and remains idle until two distinct
-/// applications share a display on the active Mission Control desktop.
+/// Ryft-owned automatic Dwindle tiling. The engine manages one standard window
+/// per visible application. A single application fills the safe work area;
+/// additional applications recursively split that same area.
 final class DwindleTilingService: ObservableObject {
     @Published private(set) var running = false
     @Published private(set) var status = "Automatic tiling is off"
@@ -45,7 +45,7 @@ final class DwindleTilingService: ObservableObject {
         enabled = value
         if value {
             running = true
-            status = AXIsProcessTrusted() ? "Waiting for a second application" : "Accessibility permission needed"
+            status = AXIsProcessTrusted() ? "Waiting for an application" : "Accessibility permission needed"
             startTimer()
             tileVisibleApplications()
         } else {
@@ -82,7 +82,7 @@ final class DwindleTilingService: ObservableObject {
 
     private func startTimer() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak self] _ in self?.tileVisibleApplications() }
+        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.tileVisibleApplications() }
     }
 
     private func tileVisibleApplications() {
@@ -100,10 +100,7 @@ final class DwindleTilingService: ObservableObject {
 
         for (_, displayWindows) in grouped {
             let ordered = displayWindows.sorted { order(for: $0.id) < order(for: $1.id) }
-            guard ordered.count >= 2, let screen = ordered.first?.screen else {
-                restore(ordered)
-                continue
-            }
+            guard let screen = ordered.first?.screen else { continue }
 
             tiledApplicationCount += ordered.count
             let frames = dwindleFrames(count: ordered.count, in: availableFrame(for: screen))
@@ -122,7 +119,11 @@ final class DwindleTilingService: ObservableObject {
         windowOrder = windowOrder.filter { existingIDs.contains($0.key) }
 
         managedApplicationCount = tiledApplicationCount
-        status = tiledApplicationCount >= 2 ? "Tiling \(tiledApplicationCount) applications" : "Waiting for a second application"
+        switch tiledApplicationCount {
+        case 0: status = "Waiting for an application"
+        case 1: status = "Filling the display with 1 application"
+        default: status = "Tiling \(tiledApplicationCount) applications"
+        }
     }
 
     private func allWindowIDs() -> Set<CGWindowID> {
@@ -202,7 +203,7 @@ final class DwindleTilingService: ObservableObject {
             applyFrame(target, to: element)
             return
         }
-        animations[id] = FrameAnimation(element: element, from: current, to: target, startedAt: CACurrentMediaTime(), duration: 0.22)
+        animations[id] = FrameAnimation(element: element, from: current, to: target.integral, startedAt: CACurrentMediaTime(), duration: 0.20)
         startAnimationTimerIfNeeded()
     }
 
@@ -218,7 +219,7 @@ final class DwindleTilingService: ObservableObject {
         var completed: [CGWindowID] = []
         for (id, animation) in animations {
             let progress = min(1, max(0, (now - animation.startedAt) / animation.duration))
-            let eased = 1 - pow(1 - progress, 4) // ease-out-quart
+            let eased = 1 - pow(1 - progress, 5) // decisive ease-out-quint
             let frame = interpolate(from: animation.from, to: animation.to, progress: CGFloat(eased))
             applyFrame(frame, to: animation.element)
             if progress >= 1 { completed.append(id) }
@@ -270,9 +271,21 @@ final class DwindleTilingService: ObservableObject {
     }
 
     private func screen(containing frame: CGRect) -> NSScreen? {
+        // CG can briefly report a visible window just beyond an edge while a
+        // Space or application transition settles. Keep it assigned to the
+        // nearest display so the next layout frame clamps it safely on-screen.
         NSScreen.screens.max { lhs, rhs in
-            intersectionArea(frame, displayBounds(for: lhs)) < intersectionArea(frame, displayBounds(for: rhs))
-        }.flatMap { intersectionArea(frame, displayBounds(for: $0)) > 0 ? $0 : nil }
+            screenScore(for: lhs, window: frame) < screenScore(for: rhs, window: frame)
+        }
+    }
+
+    private func screenScore(for screen: NSScreen, window: CGRect) -> CGFloat {
+        let bounds = displayBounds(for: screen)
+        let overlap = intersectionArea(window, bounds)
+        if overlap > 0 { return 1_000_000_000 + overlap }
+        let dx = window.midX - bounds.midX
+        let dy = window.midY - bounds.midY
+        return -(dx * dx + dy * dy)
     }
 
     private func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {

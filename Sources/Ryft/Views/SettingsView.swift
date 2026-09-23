@@ -156,7 +156,7 @@ struct TilingSettingsView: View {
 
     private var statusColor: Color {
         if !RyftPermissionStatus.accessibilityGranted { return .red }
-        if engine.managedApplicationCount >= 2 { return Color(hex: model.configuration.bar.palette.success) }
+        if engine.managedApplicationCount >= 1 { return Color(hex: model.configuration.bar.palette.success) }
         return Color(hex: model.configuration.bar.palette.accent)
     }
 
@@ -177,12 +177,12 @@ struct TilingSettingsView: View {
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             SettingsGroup("When Ryft rearranges windows") {
-                Label("One visible application is left completely untouched.", systemImage: "rectangle")
+                Label("One resizable application fills the complete safe work area.", systemImage: "rectangle")
                 Label("Opening a second application smoothly moves and resizes both windows into equal halves.", systemImage: "rectangle.split.2x1")
                 Label("Each additional application smoothly resizes the layout and splits the remaining area.", systemImage: "rectangle.split.2x2")
                 Label("The bar, Dock, display edges, fullscreen, minimized, and fixed-size windows stay clear.", systemImage: "arrow.down.right.and.arrow.up.left")
                 Label("Closing back to one application restores its original frame.", systemImage: "arrow.uturn.backward")
-                Text("Ryft manages one standard window per visible application on each display and only on the active Mission Control desktop. Turn tiling off to restore visible windows and stop all automatic placement.")
+                Text("Ryft manages one standard window per visible application on each display and only on the active Mission Control desktop. Every frame stays inside the display, below the Ryft bar, and clear of the Dock. Turn tiling off to restore original frames and stop automatic placement.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
