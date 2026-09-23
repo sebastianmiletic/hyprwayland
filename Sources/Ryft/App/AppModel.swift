@@ -34,6 +34,7 @@ final class AppModel: ObservableObject {
     @Published var wallpaperArchiveStatus = ""
     @Published var installingWallpaperArchive = false
     let system = SystemMonitor()
+    let permissions = RyftPermissionMonitor.shared
     let controls = SystemControlService()
     lazy var notifications = NotificationDaemon(controls: controls)
     let workspaces = WorkspaceService()

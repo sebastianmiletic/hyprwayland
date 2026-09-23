@@ -31,15 +31,17 @@ struct SettingsHoverButtonStyle: ButtonStyle {
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var notifications: NotificationDaemon
+    @ObservedObject private var permissions: RyftPermissionMonitor
     @StateObject private var navigation = SettingsNavigationState()
 
     init(model: AppModel) {
         self.model = model
         notifications = model.notifications
+        permissions = model.permissions
     }
 
     private var missingPermissionCount: Int {
-        RyftPermissionStatus.missingCount(notificationStatus: notifications.authorizationStatus)
+        permissions.missingCount(notificationStatus: notifications.authorizationStatus)
     }
 
     var body: some View {
@@ -164,14 +166,16 @@ struct SettingsGroup<Content: View>: View {
 struct TilingSettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var engine: DwindleTilingService
+    @ObservedObject private var permissions: RyftPermissionMonitor
 
     init(model: AppModel) {
         self.model = model
         engine = model.tiling
+        permissions = model.permissions
     }
 
     private var statusColor: Color {
-        if !RyftPermissionStatus.accessibilityGranted { return .red }
+        if !permissions.accessibilityGranted { return .red }
         if engine.managedApplicationCount >= 1 { return Color(hex: model.configuration.bar.palette.success) }
         return Color(hex: model.configuration.bar.palette.accent)
     }
@@ -185,7 +189,7 @@ struct TilingSettingsView: View {
                     Circle().fill(model.configuration.tiling.enabled ? statusColor : Color.secondary.opacity(0.45)).frame(width: 8, height: 8)
                     Text(engine.status).font(.callout).foregroundStyle(.secondary)
                     Spacer()
-                    if model.configuration.tiling.enabled && !RyftPermissionStatus.accessibilityGranted {
+                    if model.configuration.tiling.enabled && !permissions.accessibilityGranted {
                         Button("Review Accessibility") { engine.openAccessibilitySettings() }.buttonStyle(.bordered)
                     }
                 }
@@ -221,7 +225,7 @@ struct TilingSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .onAppear { engine.refresh() }
+        .onAppear { permissions.refresh(); engine.refresh() }
     }
 
     private func addException() {

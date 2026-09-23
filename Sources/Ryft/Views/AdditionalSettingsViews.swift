@@ -231,11 +231,13 @@ private struct WallpaperTile: View {
 struct GeneralSettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var notifications: NotificationDaemon
+    @ObservedObject private var permissions: RyftPermissionMonitor
     private var palette: ThemePalette { model.configuration.bar.palette }
 
     init(model: AppModel) {
         self.model = model
         notifications = model.notifications
+        permissions = model.permissions
     }
 
     var body: some View {
@@ -244,21 +246,21 @@ struct GeneralSettingsView: View {
                 "Accessibility",
                 detail: "Desktop switching and macOS control actions.",
                 symbol: "accessibility",
-                granted: RyftPermissionStatus.accessibilityGranted
+                granted: permissions.accessibilityGranted
             ) { WorkspaceController.requestAccessibility() }
             Divider()
             permissionRow(
                 "Input Monitoring",
                 detail: "Global Option+A, Option+N, and desktop shortcuts.",
                 symbol: "keyboard",
-                granted: RyftPermissionStatus.inputMonitoringGranted
+                granted: permissions.inputMonitoringGranted
             ) { openPrivacyPane("Privacy_ListenEvent") }
             Divider()
             permissionRow(
                 "Location for Wi-Fi",
                 detail: "Nearby Wi-Fi names. Ryft never stores location data.",
                 symbol: "location",
-                granted: RyftPermissionStatus.locationGranted
+                granted: permissions.locationGranted
             ) {
                 let status = CLLocationManager().authorizationStatus
                 if status == .notDetermined { model.controls.requestWiFiAccessAndScan() }
@@ -279,7 +281,7 @@ struct GeneralSettingsView: View {
                 "Screen Recording",
                 detail: "Temporary in-memory frames for the optional workspace slide.",
                 symbol: "rectangle.on.rectangle",
-                granted: RyftPermissionStatus.screenRecordingGranted
+                granted: permissions.screenRecordingGranted
             ) {
                 let granted = CGRequestScreenCaptureAccess()
                 model.statusMessage = granted ? "Screen Recording enabled" : "Screen Recording permission unchanged"
@@ -312,6 +314,7 @@ struct GeneralSettingsView: View {
         Divider().padding(.vertical, 4)
         Button(role: .destructive) { NSApp.terminate(nil) } label: { Label("Quit Ryft", systemImage: "power").frame(maxWidth: .infinity) }
             .buttonStyle(.bordered).controlSize(.large)
+        EmptyView().onAppear { permissions.refresh(); notifications.refreshAuthorization() }
     }
 
     private func permissionRow(_ title: String, detail: String, symbol: String, granted: Bool, action: @escaping () -> Void) -> some View {
