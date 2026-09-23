@@ -169,13 +169,15 @@ private struct BarStylePreview: View {
         Button { model.applyBarStyle(style) } label: {
             VStack(alignment: .leading, spacing: 8) {
                 GeometryReader { proxy in
-                    let sourceWidth: CGFloat = 920
-                    let scale = min(1, proxy.size.width / sourceWidth)
+                    let sourceWidth: CGFloat = 1280
+                    let scale = min(1, (proxy.size.width - 16) / sourceWidth)
                     ZStack {
                         LinearGradient(colors: [Color(hex: preview.palette.muted).opacity(0.3), Color(hex: preview.palette.background).opacity(0.75)], startPoint: .topLeading, endPoint: .bottomTrailing)
                         BarView(model: model, notchWidth: 0, topReservedHeight: 0, configurationOverride: preview)
                             .frame(width: sourceWidth, height: preview.height + preview.outerInset * 2)
-                            .scaleEffect(scale, anchor: .center).allowsHitTesting(false)
+                            .scaleEffect(scale, anchor: .center)
+                            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                            .allowsHitTesting(false)
                     }.clipped()
                 }
                 .frame(height: 104)
