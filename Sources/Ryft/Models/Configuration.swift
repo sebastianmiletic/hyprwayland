@@ -156,7 +156,7 @@ struct BarConfiguration: Codable, Equatable {
     var displayCornerRadius: Double = 18
     var manualNotchWidth: Double = 0
     var workspaceCount = 5
-    var showWorkspaceAppIcons = false
+    var showWorkspaceAppIcons = true
     var palette: ThemePalette = .sebastian
     var widgets: [WidgetConfiguration] = WidgetConfiguration.defaults
 
@@ -193,7 +193,7 @@ struct BarConfiguration: Codable, Equatable {
         displayCornerRadius = try c.decodeIfPresent(Double.self, forKey: .displayCornerRadius) ?? 18
         manualNotchWidth = try c.decodeIfPresent(Double.self, forKey: .manualNotchWidth) ?? 0
         workspaceCount = try c.decodeIfPresent(Int.self, forKey: .workspaceCount) ?? 5
-        showWorkspaceAppIcons = try c.decodeIfPresent(Bool.self, forKey: .showWorkspaceAppIcons) ?? false
+        showWorkspaceAppIcons = try c.decodeIfPresent(Bool.self, forKey: .showWorkspaceAppIcons) ?? true
         palette = try c.decodeIfPresent(ThemePalette.self, forKey: .palette) ?? .sebastian
         widgets = try c.decodeIfPresent([WidgetConfiguration].self, forKey: .widgets) ?? WidgetConfiguration.defaults
     }
@@ -289,7 +289,7 @@ struct RyftConfiguration: Codable, Equatable {
     var adaptColorsToWallpaper = true
     var todos: [String] = []
     var savedBars: [NamedBarProfile] = []
-    var sourcePresetVersion = 13
+    var sourcePresetVersion = 14
     var launchAtLogin = false
     var hasCompletedOnboarding = false
     var tiling = TilingConfiguration()

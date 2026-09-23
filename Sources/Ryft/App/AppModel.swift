@@ -167,6 +167,10 @@ final class AppModel: ObservableObject {
             if let index = configuration.bar.widgets.firstIndex(where: { $0.kind == .leftSidebar }) { configuration.bar.widgets[index].icon = "sparkle" }
             configuration.sourcePresetVersion = 13
         }
+        if configuration.sourcePresetVersion < 14 {
+            configuration.bar.showWorkspaceAppIcons = true
+            configuration.sourcePresetVersion = 14
+        }
         // Wallpaper changes are bar/settings-only, including imported profiles.
         configuration.shortcuts.removeAll { $0.action == .wallpaper || $0.action == .randomWallpaper }
         // Sidebar entry points remain guaranteed global defaults.

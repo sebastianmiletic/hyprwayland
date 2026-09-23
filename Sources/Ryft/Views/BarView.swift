@@ -158,6 +158,41 @@ private struct WidgetZoneDropDelegate: DropDelegate {
     }
 }
 
+private struct BatteryGaugeIcon: View {
+    let level: Int
+    let charging: Bool
+    let color: Color
+    let background: Color
+
+    private var step: Int {
+        guard level >= 0 else { return 0 }
+        return max(0, min(100, Int((Double(level) / 5).rounded()) * 5))
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2.4, style: .continuous)
+                .stroke(color, lineWidth: 1.35)
+                .frame(width: 19, height: 11)
+            RoundedRectangle(cornerRadius: 1.35, style: .continuous)
+                .fill(color)
+                .frame(width: 15.5 * CGFloat(step) / 100, height: 7)
+                .offset(x: 2)
+            Capsule().fill(color).frame(width: 2.2, height: 5).offset(x: 20)
+            if charging {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 6.5, weight: .black))
+                    .foregroundStyle(step >= 50 ? background : color)
+                    .frame(width: 19, height: 11)
+            }
+        }
+        .frame(width: 23, height: 12)
+        .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.16), value: step)
+        .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.12), value: charging)
+        .accessibilityLabel("Battery \(max(level, 0)) percent\(charging ? ", charging" : "")")
+    }
+}
+
 private struct WidgetView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var system: SystemMonitor
@@ -207,19 +242,27 @@ private struct WidgetView: View {
                             Circle().fill(number == workspaces.currentDesktop ? Color(hex: palette.accent) : .clear)
                             if model.configuration.bar.showWorkspaceAppIcons, let icon = workspaces.icon(forDesktop: number) {
                                 Image(nsImage: icon).resizable().scaledToFit().padding(2).clipShape(Circle())
+                                    .id("\(number)-\(workspaces.desktopApplications[number]?.bundlePath ?? "app")")
+                                    .transition(.scale(scale: 0.72).combined(with: .opacity))
                             } else {
                                 Text("\(number)").font(.system(size: 11, weight: .semibold, design: .rounded))
                                     .foregroundStyle(number == workspaces.currentDesktop ? Color(hex: palette.background) : Color(hex: palette.muted))
+                                    .id("\(number)-number")
+                                    .transition(.scale(scale: 0.72).combined(with: .opacity))
                             }
                         }
                         .frame(width: 22, height: 22)
                         .overlay(Circle().stroke(number == workspaces.currentDesktop ? Color(hex: palette.accent) : .clear, lineWidth: 1.5))
                         .frame(width: 26, height: 26)
                     }.buttonStyle(SourcePressButtonStyle())
+                        .transition(.scale(scale: 0.78).combined(with: .opacity))
                         .accessibilityLabel(workspaces.desktopApplications[number].map { "Desktop \(number), \($0.name)" } ?? "Desktop \(number)")
                         .help(workspaces.desktopApplications[number].map { "Desktop \(number) · \($0.name)" } ?? "Desktop \(number)")
                 }
             }
+            .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.18), value: workspaces.desktopCount)
+            .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.16), value: workspaces.desktopApplications)
+            .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.14), value: workspaces.currentDesktop)
         case .clock:
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 widgetLabel(context.date.formatted(date: .abbreviated, time: .shortened)).monospacedDigit()
@@ -231,7 +274,7 @@ private struct WidgetView: View {
         case .battery:
             HStack(spacing: 5) {
                 if widget.showIcon {
-                    Image(systemName: batterySymbol).foregroundStyle(batteryColor)
+                    BatteryGaugeIcon(level: controls.batteryLevel, charging: controls.batteryCharging, color: batteryColor, background: Color(hex: palette.background))
                 }
                 if widget.showLabel { Text(controls.batteryPercent).lineLimit(1) }
             }
@@ -240,7 +283,7 @@ private struct WidgetView: View {
         case .rightSidebar:
             if model.configuration.bar.sourceExact {
                 HStack(spacing: 12) {
-                    detailButton(batterySymbol, detail: "Battery", color: batteryColor)
+                    batteryDetailButton
                     detailButton("keyboard", detail: "")
                     detailButton("wifi", detail: "Wi-Fi")
                     detailButton(controls.outputVolume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill", detail: "Sound")
@@ -252,10 +295,6 @@ private struct WidgetView: View {
         }
     }
 
-    private var batterySymbol: String {
-        if controls.batteryCharging { return "battery.100percent.bolt" }
-        switch controls.batteryLevel { case 90...: return "battery.100percent"; case 65..<90: return "battery.75percent"; case 40..<65: return "battery.50percent"; case 15..<40: return "battery.25percent"; default: return "battery.0percent" }
-    }
     private var batteryColor: Color { controls.lowPowerMode ? .yellow : .white }
     private var popoverPresented: Binding<Bool> {
         Binding(get: { model.statusPopoverWidgetID == widget.id && model.statusPopoverInteractionID == interactionID }, set: { if !$0 { model.statusPopoverWidgetID = nil; model.statusPopoverInteractionID = nil; model.statusPopoverDetail = "" } })
@@ -277,6 +316,16 @@ private struct WidgetView: View {
         default: break
         }
     }
+    private var batteryDetailButton: some View {
+        Button {
+            guard actionEnabled else { return }
+            controls.setLowPowerMode(!controls.lowPowerMode)
+        } label: {
+            BatteryGaugeIcon(level: controls.batteryLevel, charging: controls.batteryCharging, color: batteryColor, background: Color(hex: palette.background))
+                .frame(width: 25, height: 24)
+        }
+        .buttonStyle(SourcePressButtonStyle()).help("Battery")
+    }
     private func detailButton(_ icon: String, detail: String, color: Color? = nil) -> some View {
         Button {
             guard actionEnabled else { return }
@@ -284,7 +333,7 @@ private struct WidgetView: View {
             else if detail.isEmpty { NotificationCenter.default.post(name: .ryftToggleRightSidebar, object: nil) }
             else { model.statusPopoverDetail = detail; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; if detail == "Wi-Fi" { controls.requestWiFiAccessAndScan() }; if detail == "Sound" { controls.refreshAudioDevices() } }
         } label: {
-            Image(systemName: detail == "Battery" && controls.batteryCharging ? "battery.100percent.bolt" : icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24)
+            Image(systemName: icon).foregroundStyle(color ?? Color(hex: palette.foreground)).frame(width: 18, height: 24)
         }
             .buttonStyle(SourcePressButtonStyle()).help(detail.isEmpty ? "Control center" : detail)
     }
@@ -455,7 +504,12 @@ private struct StatusQuickPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 9) {
-                Image(systemName: icon).foregroundStyle(iconColor).frame(width: 26, height: 26).background(Color(hex: palette.surface)).clipShape(Circle())
+                if detail == "Battery" {
+                    BatteryGaugeIcon(level: controls.batteryLevel, charging: controls.batteryCharging, color: iconColor, background: Color(hex: palette.surface))
+                        .frame(width: 30, height: 26).background(Color(hex: palette.surface)).clipShape(Circle())
+                } else {
+                    Image(systemName: icon).foregroundStyle(iconColor).frame(width: 26, height: 26).background(Color(hex: palette.surface)).clipShape(Circle())
+                }
                 Text(detail).font(.system(size: 15, weight: .semibold, design: .rounded)); Spacer()
             }
             Rectangle().fill(Color(hex: palette.muted).opacity(0.25)).frame(height: 1)
@@ -470,11 +524,7 @@ private struct StatusQuickPopover: View {
         guard detail == "Battery" else { return Color(hex: palette.accent) }
         return controls.lowPowerMode ? .yellow : .white
     }
-    private var icon: String {
-        if detail == "Wi-Fi" { return "wifi" }; if detail == "Sound" { return "speaker.wave.2.fill" }
-        if controls.batteryCharging { return "battery.100percent.bolt" }
-        switch controls.batteryLevel { case 90...: return "battery.100percent"; case 65..<90: return "battery.75percent"; case 40..<65: return "battery.50percent"; case 15..<40: return "battery.25percent"; default: return "battery.0percent" }
-    }
+    private var icon: String { detail == "Wi-Fi" ? "wifi" : "speaker.wave.2.fill" }
     private var wifiContent: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
@@ -520,7 +570,7 @@ private struct StatusQuickPopover: View {
     }
     private var batteryContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack { Image(systemName: "battery.75percent").font(.title); Text(controls.batteryPercent).font(.title2.weight(.semibold)); Spacer() }
+            HStack { BatteryGaugeIcon(level: controls.batteryLevel, charging: controls.batteryCharging, color: iconColor, background: Color(hex: palette.background)).scaleEffect(1.35); Text(controls.batteryPercent).font(.title2.weight(.semibold)).monospacedDigit(); Spacer() }
             Toggle("Low Power Mode", isOn: Binding(get: { controls.lowPowerMode }, set: controls.setLowPowerMode)).toggleStyle(.switch).tint(Color(hex: palette.accent))
             Button("Open Battery Settings") { model.openSystemSettings("Battery-Settings.extension") }.buttonStyle(QuickPopoverButtonStyle(palette: palette))
         }

@@ -28,7 +28,7 @@ final class WorkspaceService: ObservableObject {
     private let copySpaces: CopySpaces?
     private let setCurrentSpace: SetCurrentSpace?
     private let copyWindows: CopyWindows?
-    private var observer: NSObjectProtocol?
+    private var observers: [NSObjectProtocol] = []
     private var refreshTimer: DispatchSourceTimer?
     private var lastApplicationRefresh = Date.distantPast
     private let iconCache = NSCache<NSString, NSImage>()
@@ -39,12 +39,19 @@ final class WorkspaceService: ObservableObject {
         if let library, let symbol = dlsym(library, "CGSCopyManagedDisplaySpaces") { copySpaces = unsafeBitCast(symbol, to: CopySpaces.self) } else { copySpaces = nil }
         if let library, let symbol = dlsym(library, "CGSManagedDisplaySetCurrentSpace") { setCurrentSpace = unsafeBitCast(symbol, to: SetCurrentSpace.self) } else { setCurrentSpace = nil }
         if let library, let symbol = dlsym(library, "SLSCopyWindowsWithOptionsAndTags") { copyWindows = unsafeBitCast(symbol, to: CopyWindows.self) } else { copyWindows = nil }
-        observer = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             // Read immediately, then retry on the next frames in case Dock has
             // posted before its managed-space dictionary is fully committed.
-            self?.refresh()
+            self?.forceApplicationRefresh()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) { self?.refresh() }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.refresh() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.forceApplicationRefresh() }
+        })
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification, NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification, NSWorkspace.didActivateApplicationNotification] {
+            observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.forceApplicationRefresh()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { self?.forceApplicationRefresh() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.forceApplicationRefresh() }
+            })
         }
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now(), repeating: .milliseconds(50), leeway: .milliseconds(5))
@@ -54,7 +61,7 @@ final class WorkspaceService: ObservableObject {
     }
 
     deinit {
-        if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+        observers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         refreshTimer?.cancel()
         if let library { dlclose(library) }
     }
@@ -70,10 +77,15 @@ final class WorkspaceService: ObservableObject {
         let newCount = max(ids.count, 1)
         if desktopCount != newCount { desktopCount = newCount }
         if let index = ids.firstIndex(of: currentID), currentDesktop != index + 1 { currentDesktop = index + 1 }
-        if Date().timeIntervalSince(lastApplicationRefresh) >= 0.5 {
+        if Date().timeIntervalSince(lastApplicationRefresh) >= 0.15 {
             lastApplicationRefresh = Date(); refreshDesktopApplications(spaces: ordinary)
         }
         if !canReadSpaces { canReadSpaces = true }
+    }
+
+    private func forceApplicationRefresh() {
+        lastApplicationRefresh = .distantPast
+        refresh()
     }
 
     func icon(forDesktop number: Int) -> NSImage? {

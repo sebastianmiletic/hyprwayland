@@ -3,6 +3,7 @@ import Combine
 import CoreAudio
 import CoreLocation
 import CoreWLAN
+import IOKit.ps
 
 struct WiFiNetworkInfo: Identifiable, Hashable {
     let id: String
@@ -39,14 +40,30 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     }()
     private var levelTimer: Timer?
     private var powerTimer: Timer?
+    private var powerSource: CFRunLoopSource?
+    private var observers: [NSObjectProtocol] = []
+    private var workspaceObservers: [NSObjectProtocol] = []
 
     override init() {
         super.init()
         refreshAll()
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { [weak self] _ in self?.refreshOutputLevel() }
-        powerTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.refreshPowerState() }
+        powerTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshPowerState() }
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        powerSource = IOPSNotificationCreateRunLoopSource({ context in
+            guard let context else { return }
+            Unmanaged<SystemControlService>.fromOpaque(context).takeUnretainedValue().refreshPowerState()
+        }, context)?.takeRetainedValue()
+        if let powerSource { CFRunLoopAddSource(CFRunLoopGetMain(), powerSource, .commonModes) }
+        observers.append(NotificationCenter.default.addObserver(forName: Notification.Name.NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in self?.refreshPowerState() })
+        workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.refreshPowerState() })
     }
-    deinit { levelTimer?.invalidate(); powerTimer?.invalidate() }
+    deinit {
+        levelTimer?.invalidate(); powerTimer?.invalidate()
+        if let powerSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), powerSource, .commonModes) }
+        observers.forEach(NotificationCenter.default.removeObserver)
+        workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
+    }
 
     func refreshAll() {
         refreshWiFiState(); refreshAudioDevices(); refreshPowerState()
@@ -164,24 +181,26 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     func setMuted(_ muted: Bool) { runAppleScript("set volume output muted \(muted ? "true" : "false")") }
 
     func refreshPowerState() {
-        runProcess("/usr/bin/pmset", ["-g", "batt"]) { text in
-            let percent = text.range(of: #"\d+%"#, options: .regularExpression).map { String(text[$0]) } ?? "--"
-            let level = Int(percent.filter(\.isNumber)) ?? -1
-            let lowPower = text.localizedCaseInsensitiveContains("low power mode: 1")
-            let batteryLine = text.components(separatedBy: .newlines).first { $0.contains("%") }
-            let powerState = batteryLine?.components(separatedBy: ";").dropFirst().first?
-                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            // Match pmset's state field exactly. Substring matching incorrectly
-            // treated "discharging" as "charging", while AC Power can be
-            // connected without the battery actively accepting a charge.
-            let charging = powerState == "charging" || powerState == "finishing charge"
-            DispatchQueue.main.async { self.batteryPercent = percent; self.batteryLevel = level; self.batteryCharging = charging; self.lowPowerMode = lowPower }
+        let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef] else {
+            lowPowerMode = lowPower
+            return
         }
-        runProcess("/usr/bin/pmset", ["-g", "custom"]) { text in
-            let matches = text.components(separatedBy: .newlines).filter { $0.contains("lowpowermode") }
-            let lowPower = matches.contains { $0.split(separator: " ").last == "1" }
-            DispatchQueue.main.async { self.lowPowerMode = lowPower }
+        for source in sources {
+            guard let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
+                  (description[kIOPSTypeKey] as? String) == (kIOPSInternalBatteryType as String),
+                  (description[kIOPSIsPresentKey] as? Bool) != false else { continue }
+            let current = (description[kIOPSCurrentCapacityKey] as? NSNumber)?.doubleValue ?? 0
+            let maximum = max((description[kIOPSMaxCapacityKey] as? NSNumber)?.doubleValue ?? 100, 1)
+            let level = max(0, min(100, Int((current / maximum * 100).rounded())))
+            let charging = (description[kIOPSIsChargingKey] as? Bool) == true
+            if batteryLevel != level { batteryLevel = level; batteryPercent = "\(level)%" }
+            if batteryCharging != charging { batteryCharging = charging }
+            if lowPowerMode != lowPower { lowPowerMode = lowPower }
+            return
         }
+        lowPowerMode = lowPower
     }
 
     func setLowPowerMode(_ enabled: Bool) {
