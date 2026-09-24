@@ -34,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // Hide Apple's menu surface before creating any Ryft windows so there
+        // is no launch-frame flash beneath the desktop bar.
+        NSMenu.setMenuBarVisible(false)
         let model = AppModel.shared
         _ = model.notifications
         // Capture the native menu-bar boundary before Ryft hides it. This exact

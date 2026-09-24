@@ -131,8 +131,15 @@ final class BarPanelController {
     }
 
     private func updateMenuBarCover(_ panel: NSPanel, on screen: NSScreen, config: BarConfiguration) {
-        guard config.enabled,
-              !coversWaitingForWallpaper.contains(ObjectIdentifier(panel)) else { panel.orderOut(nil); return }
+        guard config.enabled else { panel.orderOut(nil); return }
+        // During a Space transition keep the existing opaque cover visible.
+        // Ordering it out, even briefly, exposes the native macOS menu bar.
+        // The panel travels with the active Space and its crop is replaced as
+        // soon as NSWorkspace publishes the destination wallpaper.
+        guard !coversWaitingForWallpaper.contains(ObjectIdentifier(panel)) else {
+            if !panel.isVisible { panel.orderFrontRegardless() }
+            return
+        }
         // Cover the native menu-bar row for every Ryft edge, including behind
         // a floating top bar. The cover remains one level below Ryft itself.
         // One-pixel overlap removes the hairline that can appear where the
@@ -147,7 +154,9 @@ final class BarPanelController {
         spaceChangeGeneration = generation
         coverWallpaperBeforeSpaceChange = Dictionary(uniqueKeysWithValues: entries.map { ($0.screenID, $0.context.wallpaperPath) })
         coversWaitingForWallpaper = Set(entries.map { ObjectIdentifier($0.menuBarCoverPanel) })
-        entries.forEach { $0.menuBarCoverPanel.orderOut(nil) }
+        // Never remove the cover between Spaces. Keeping it opaque prevents a
+        // one-frame flash of Apple's menu bar while wallpaper metadata catches up.
+        entries.forEach { if !$0.menuBarCoverPanel.isVisible { $0.menuBarCoverPanel.orderFrontRegardless() } }
         for (attempt, delay) in [0.06, 0.16, 0.32, 0.52].enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.restoreCoversAfterSpaceChange(generation: generation, force: attempt == 3)
