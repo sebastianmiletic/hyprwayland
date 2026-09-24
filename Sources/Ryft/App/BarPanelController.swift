@@ -30,6 +30,9 @@ final class BarPanelController {
     private let model: AppModel
     private var entries: [PanelEntry] = []
     private var cancellables = Set<AnyCancellable>()
+    private var coversWaitingForWallpaper = Set<ObjectIdentifier>()
+    private var coverWallpaperBeforeSpaceChange: [NSNumber: String] = [:]
+    private var spaceChangeGeneration = UUID()
 
     init(model: AppModel) {
         self.model = model
@@ -39,7 +42,7 @@ final class BarPanelController {
         NotificationCenter.default.publisher(for: .ryftWallpaperChanged)
             .sink { [weak self] _ in self?.synchronize(self?.model.configuration.bar) }.store(in: &cancellables)
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
-            .sink { [weak self] _ in self?.synchronize(self?.model.configuration.bar) }.store(in: &cancellables)
+            .sink { [weak self] _ in self?.prepareCoversForSpaceChange() }.store(in: &cancellables)
         Timer.publish(every: 1, on: .main, in: .common).autoconnect()
             .sink { [weak self] _ in self?.refreshWallpaperPaths() }.store(in: &cancellables)
         synchronize(model.configuration.bar)
@@ -119,17 +122,54 @@ final class BarPanelController {
         let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 1)
         panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = false; panel.hidesOnDeactivate = false; panel.ignoresMouseEvents = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        // Belong to the current Space rather than remaining stationary across
+        // every Space. During a swipe, each cover therefore travels with the
+        // wallpaper it was cropped from instead of bleeding into the next one.
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .ignoresCycle]
         panel.contentView = NSHostingView(rootView: MenuBarCoverRoot(context: context))
         return panel
     }
 
     private func updateMenuBarCover(_ panel: NSPanel, on screen: NSScreen, config: BarConfiguration) {
-        // Never paint a second wallpaper image over the desktop. The synthetic
-        // crop produced a visible seam and showed the previous Space during
-        // swipe transitions. With the native menu bar hidden, the real per-Space
-        // wallpaper already fills this exact region without an overlay.
-        panel.orderOut(nil)
+        guard config.position != .top,
+              !coversWaitingForWallpaper.contains(ObjectIdentifier(panel)) else { panel.orderOut(nil); return }
+        // One-pixel overlap removes the hairline that can appear where the
+        // synthetic crop meets the native desktop wallpaper at fractional scale.
+        let height = ceil(DisplayLayoutMetrics.menuBarHeight(for: screen)) + 1
+        panel.setFrame(NSRect(x: screen.frame.minX, y: screen.frame.maxY - height, width: screen.frame.width, height: height), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    private func prepareCoversForSpaceChange() {
+        let generation = UUID()
+        spaceChangeGeneration = generation
+        coverWallpaperBeforeSpaceChange = Dictionary(uniqueKeysWithValues: entries.map { ($0.screenID, $0.context.wallpaperPath) })
+        coversWaitingForWallpaper = Set(entries.map { ObjectIdentifier($0.menuBarCoverPanel) })
+        entries.forEach { $0.menuBarCoverPanel.orderOut(nil) }
+        for (attempt, delay) in [0.06, 0.16, 0.32, 0.52].enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.restoreCoversAfterSpaceChange(generation: generation, force: attempt == 3)
+            }
+        }
+    }
+
+    private func restoreCoversAfterSpaceChange(generation: UUID, force: Bool) {
+        guard generation == spaceChangeGeneration else { return }
+        let config = model.configuration.bar
+        for entry in entries {
+            guard let screen = NSScreen.screens.first(where: { screenID($0) == entry.screenID }) else { continue }
+            let path = wallpaperPath(for: screen)
+            let previous = coverWallpaperBeforeSpaceChange[entry.screenID] ?? ""
+            guard force || path != previous else { continue }
+            if entry.context.wallpaperPath != path { entry.context.wallpaperPath = path }
+            coversWaitingForWallpaper.remove(ObjectIdentifier(entry.menuBarCoverPanel))
+            updateMenuBarCover(entry.menuBarCoverPanel, on: screen, config: config)
+        }
+        if coversWaitingForWallpaper.isEmpty || force {
+            if force { coversWaitingForWallpaper.removeAll() }
+            coverWallpaperBeforeSpaceChange.removeAll()
+            synchronize(config)
+        }
     }
 
     private func makeCornerPanel(isLeft: Bool) -> NSPanel {
@@ -182,7 +222,8 @@ final class BarPanelController {
 
     private func refreshWallpaperPaths() {
         for entry in entries {
-            guard let screen = NSScreen.screens.first(where: { screenID($0) == entry.screenID }) else { continue }
+            guard !coversWaitingForWallpaper.contains(ObjectIdentifier(entry.menuBarCoverPanel)),
+                  let screen = NSScreen.screens.first(where: { screenID($0) == entry.screenID }) else { continue }
             let path = wallpaperPath(for: screen)
             if entry.context.wallpaperPath != path { entry.context.wallpaperPath = path }
         }
