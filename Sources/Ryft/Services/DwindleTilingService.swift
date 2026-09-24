@@ -32,6 +32,14 @@ final class DwindleTilingService: ObservableObject {
         let duration: CFTimeInterval
     }
 
+    private enum SplitAxis { case horizontal, vertical }
+    private struct LayoutSplit {
+        let index: Int
+        let axis: SplitAxis
+        let container: CGRect
+        let boundary: CGFloat
+    }
+
     private var enabled = false
     private var timer: Timer?
     private var animationTimer: Timer?
@@ -45,6 +53,11 @@ final class DwindleTilingService: ObservableObject {
     private var pendingLayoutSignature: [String] = []
     private var pendingLayoutObservations = 0
     private var forceNextLayout = true
+    private var expectedFrames: [CGWindowID: CGRect] = [:]
+    private var splitRatios: [CGDirectDisplayID: [CGFloat]] = [:]
+    private var pointerWasDown = false
+    private var pointerInteractionActive = false
+    private var pointerBaseline: [CGWindowID: CGRect] = [:]
 
     func setEnabled(_ value: Bool) {
         enabled = value
@@ -57,6 +70,7 @@ final class DwindleTilingService: ObservableObject {
         } else {
             restoreManagedWindows(animated: true)
             timer?.invalidate(); timer = nil
+            expectedFrames.removeAll(); splitRatios.removeAll(); pointerWasDown = false; pointerInteractionActive = false; pointerBaseline.removeAll()
             running = false
             managedApplicationCount = 0
             status = "Automatic tiling is off"
@@ -88,6 +102,7 @@ final class DwindleTilingService: ObservableObject {
         timer?.invalidate(); timer = nil
         animationTimer?.invalidate(); animationTimer = nil
         animations.removeAll()
+        expectedFrames.removeAll(); splitRatios.removeAll(); pointerWasDown = false; pointerInteractionActive = false; pointerBaseline.removeAll()
         enabled = false
     }
 
@@ -129,18 +144,50 @@ final class DwindleTilingService: ObservableObject {
         pendingLayoutObservations = 0
 
         let grouped = Dictionary(grouping: windows, by: { displayID(for: $0.screen) })
+
+        // While the pointer is down, let the native window edge or title bar
+        // track the pointer without Ryft fighting AppKit. On release, translate
+        // the gesture into either a divider ratio or a slot swap.
+        let pointerDown = NSEvent.pressedMouseButtons & 1 != 0
+        if pointerDown {
+            if !pointerWasDown {
+                pointerWasDown = true
+                animationTimer?.invalidate(); animationTimer = nil
+                animations.removeAll()
+                pointerBaseline = Dictionary(uniqueKeysWithValues: windows.map { ($0.id, $0.frame) })
+            } else if windows.contains(where: { window in
+                pointerBaseline[window.id].map { frameDifference(window.frame, $0) > 3 } ?? false
+            }) {
+                pointerInteractionActive = true
+            }
+            // Pausing corrective writes during a left-button gesture keeps
+            // native edge and title-bar tracking smooth and race-free.
+            return
+        } else if pointerWasDown {
+            pointerWasDown = false
+            pointerBaseline.removeAll()
+            if pointerInteractionActive {
+                pointerInteractionActive = false
+                absorbPointerInteraction(windows: windows, grouped: grouped)
+            }
+        }
+
         var tiledIDs = Set<CGWindowID>()
         var tiledApplicationCount = 0
+        var nextExpectedFrames: [CGWindowID: CGRect] = [:]
 
-        for (_, displayWindows) in grouped {
+        for (display, displayWindows) in grouped {
             let ordered = displayWindows.sorted { order(for: $0.id) < order(for: $1.id) }
             guard let screen = ordered.first?.screen else { continue }
 
             tiledApplicationCount += ordered.count
-            let frames = dwindleFrames(count: ordered.count, in: availableFrame(for: screen))
+            let frame = availableFrame(for: screen)
+            let ratios = ratios(for: display, count: ordered.count)
+            let frames = dwindleLayout(count: ordered.count, in: frame, ratios: ratios).frames
             for (window, target) in zip(ordered, frames) {
                 if originalWindows[window.id] == nil { originalWindows[window.id] = OriginalWindow(frame: window.frame, element: window.element) }
                 setFrame(target, for: window.element, id: window.id)
+                nextExpectedFrames[window.id] = target
                 tiledIDs.insert(window.id)
             }
         }
@@ -151,6 +198,8 @@ final class DwindleTilingService: ObservableObject {
         let existingIDs = allWindowIDs()
         originalWindows = originalWindows.filter { existingIDs.contains($0.key) }
         windowOrder = windowOrder.filter { existingIDs.contains($0.key) }
+        expectedFrames = nextExpectedFrames
+        splitRatios = splitRatios.filter { grouped[$0.key] != nil }
 
         managedApplicationCount = tiledApplicationCount
         switch tiledApplicationCount {
@@ -408,10 +457,90 @@ final class DwindleTilingService: ObservableObject {
         return frame.insetBy(dx: gap, dy: gap)
     }
 
-    private func dwindleFrames(count: Int, in frame: CGRect) -> [CGRect] {
-        guard count > 1 else { return [frame.integral] }
-        let gap = max(0, min(configuration.gap, 40))
+    private func ratios(for display: CGDirectDisplayID, count: Int) -> [CGFloat] {
+        let needed = max(0, count - 1)
+        var values = splitRatios[display] ?? []
+        if values.count > needed { values.removeLast(values.count - needed) }
+        if values.count < needed { values.append(contentsOf: repeatElement(0.5, count: needed - values.count)) }
+        splitRatios[display] = values
+        return values
+    }
+
+    private func absorbPointerInteraction(
+        windows: [ManagedWindow],
+        grouped: [CGDirectDisplayID: [ManagedWindow]]
+    ) {
+        for (display, displayWindows) in grouped {
+            let ordered = displayWindows.sorted { order(for: $0.id) < order(for: $1.id) }
+            guard ordered.count > 1, let screen = ordered.first?.screen else { continue }
+            let available = availableFrame(for: screen)
+            var ratios = ratios(for: display, count: ordered.count)
+            let layout = dwindleLayout(count: ordered.count, in: available, ratios: ratios)
+            guard let changedIndex = ordered.indices.max(by: {
+                frameDifference(ordered[$0].frame, layout.frames[$0]) < frameDifference(ordered[$1].frame, layout.frames[$1])
+            }), frameDifference(ordered[changedIndex].frame, layout.frames[changedIndex]) > 5 else { continue }
+
+            let actual = ordered[changedIndex].frame
+            let expected = layout.frames[changedIndex]
+            let movedDistance = hypot(actual.midX - expected.midX, actual.midY - expected.midY)
+            let sizeDifference = max(abs(actual.width - expected.width), abs(actual.height - expected.height))
+
+            // A title-bar drag into another slot swaps the two applications.
+            // Reordering the stable slot indices means the following layout
+            // animates both windows simultaneously rather than chasing them.
+            if movedDistance > 24, sizeDifference < 40,
+               let destination = layout.frames.indices.first(where: { $0 != changedIndex && layout.frames[$0].contains(CGPoint(x: actual.midX, y: actual.midY)) }) {
+                let firstOrder = order(for: ordered[changedIndex].id)
+                let secondOrder = order(for: ordered[destination].id)
+                windowOrder[ordered[changedIndex].id] = secondOrder
+                windowOrder[ordered[destination].id] = firstOrder
+                status = "Swapped applications"
+                continue
+            }
+
+            // An edge drag changes the nearest Dwindle separator. Every window
+            // on the opposite side is resized from the same ratio, preserving
+            // gaps and preventing overlap even in deeper recursive layouts.
+            let gap = CGFloat(max(0, min(configuration.gap, 40)))
+            var best: (split: LayoutSplit, boundary: CGFloat, delta: CGFloat)?
+            for split in layout.splits where changedIndex >= split.index {
+                let oldEdge: CGFloat
+                let newEdge: CGFloat
+                switch split.axis {
+                case .horizontal:
+                    if changedIndex == split.index { oldEdge = expected.maxX; newEdge = actual.maxX }
+                    else { oldEdge = expected.minX - gap; newEdge = actual.minX - gap }
+                case .vertical:
+                    if changedIndex == split.index { oldEdge = expected.maxY; newEdge = actual.maxY }
+                    else { oldEdge = expected.minY - gap; newEdge = actual.minY - gap }
+                }
+                guard abs(oldEdge - split.boundary) <= 3 else { continue }
+                let delta = abs(newEdge - split.boundary)
+                if delta > (best?.delta ?? 5) { best = (split, newEdge, delta) }
+            }
+            guard let best else { continue }
+            let usable: CGFloat
+            let consumed: CGFloat
+            switch best.split.axis {
+            case .horizontal:
+                usable = best.split.container.width - gap
+                consumed = best.boundary - best.split.container.minX
+            case .vertical:
+                usable = best.split.container.height - gap
+                consumed = best.boundary - best.split.container.minY
+            }
+            guard usable > 1 else { continue }
+            ratios[best.split.index] = min(0.82, max(0.18, consumed / usable))
+            splitRatios[display] = ratios
+            status = "Adjusted tile split"
+        }
+    }
+
+    private func dwindleLayout(count: Int, in frame: CGRect, ratios: [CGFloat]) -> (frames: [CGRect], splits: [LayoutSplit]) {
+        guard count > 1 else { return ([frame.integral], []) }
+        let gap = CGFloat(max(0, min(configuration.gap, 40)))
         var frames: [CGRect] = []
+        var splits: [LayoutSplit] = []
         var remainder = frame
 
         for index in 0..<count {
@@ -420,27 +549,21 @@ final class DwindleTilingService: ObservableObject {
                 frames.append(remainder.integral)
                 break
             }
-
+            let ratio = min(0.82, max(0.18, ratios.indices.contains(index) ? ratios[index] : 0.5))
             if remainder.width >= remainder.height {
-                let firstWidth = floor((remainder.width - gap) / 2)
-                frames.append(CGRect(x: remainder.minX, y: remainder.minY, width: firstWidth, height: remainder.height).integral)
-                remainder = CGRect(
-                    x: remainder.minX + firstWidth + gap,
-                    y: remainder.minY,
-                    width: remainder.width - firstWidth - gap,
-                    height: remainder.height
-                )
+                let firstWidth = floor((remainder.width - gap) * ratio)
+                let first = CGRect(x: remainder.minX, y: remainder.minY, width: firstWidth, height: remainder.height)
+                frames.append(first.integral)
+                splits.append(LayoutSplit(index: index, axis: .horizontal, container: remainder, boundary: first.maxX))
+                remainder = CGRect(x: first.maxX + gap, y: remainder.minY, width: remainder.width - firstWidth - gap, height: remainder.height)
             } else {
-                let firstHeight = floor((remainder.height - gap) / 2)
-                frames.append(CGRect(x: remainder.minX, y: remainder.minY, width: remainder.width, height: firstHeight).integral)
-                remainder = CGRect(
-                    x: remainder.minX,
-                    y: remainder.minY + firstHeight + gap,
-                    width: remainder.width,
-                    height: remainder.height - firstHeight - gap
-                )
+                let firstHeight = floor((remainder.height - gap) * ratio)
+                let first = CGRect(x: remainder.minX, y: remainder.minY, width: remainder.width, height: firstHeight)
+                frames.append(first.integral)
+                splits.append(LayoutSplit(index: index, axis: .vertical, container: remainder, boundary: first.maxY))
+                remainder = CGRect(x: remainder.minX, y: first.maxY + gap, width: remainder.width, height: remainder.height - firstHeight - gap)
             }
         }
-        return frames
+        return (frames, splits)
     }
 }
