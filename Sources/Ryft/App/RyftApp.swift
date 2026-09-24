@@ -127,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.isOpaque = false
         settingsWindow.backgroundColor = .clear
         settingsWindow.titlebarAppearsTransparent = true
+        settingsWindow.titleVisibility = .hidden
         settingsWindow.standardWindowButton(.closeButton)?.target = self
         settingsWindow.standardWindowButton(.closeButton)?.action = #selector(closeSettingsWindow)
     }
@@ -185,9 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func leftSidebarFromMenu() { sidePanelController?.toggleLeft() }
     @objc private func rightSidebarFromMenu() { sidePanelController?.toggleRight() }
     @objc private func toggleBarFromMenu() { AppModel.shared.configuration.bar.enabled.toggle() }
-    @objc private func openInputMonitoringFromMenu() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") { NSWorkspace.shared.open(url) }
-    }
+    @objc private func openInputMonitoringFromMenu() { WorkspaceController.openPrivacyPane("Privacy_ListenEvent") }
     @objc private func quitFromMenu() { NSApp.terminate(nil) }
 
     func perform(_ shortcut: ShortcutConfiguration) {

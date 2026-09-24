@@ -3,9 +3,9 @@ import ApplicationServices
 import Combine
 import QuartzCore
 
-/// Ryft-owned automatic Dwindle tiling. The engine manages one standard window
-/// per visible application. One application fills the safe work area; each
-/// additional application splits the remaining pane along its longest axis.
+/// Ryft-owned automatic Dwindle tiling. The engine manages the primary
+/// resizable window from every visible application on the active desktop. One
+/// application fills the safe work area; each additional application splits it.
 final class DwindleTilingService: ObservableObject {
     @Published private(set) var running = false
     @Published private(set) var status = "Automatic tiling is off"
@@ -178,8 +178,10 @@ final class DwindleTilingService: ObservableObject {
             return lhsKnown == rhsKnown ? lhs.offset < rhs.offset : lhsKnown
         }.map(\.element)
         let ownPID = ProcessInfo.processInfo.processIdentifier
-        var seenPIDs = Set<pid_t>()
         var result: [ManagedWindow] = []
+        var seenPIDs = Set<pid_t>()
+        var accessibleByPID: [pid_t: [(element: AXUIElement, frame: CGRect)]] = [:]
+        var usedAccessibleIndices: [pid_t: Set<Int>] = [:]
 
         for info in list {
             guard let pidNumber = info[kCGWindowOwnerPID] as? NSNumber,
@@ -190,31 +192,42 @@ final class DwindleTilingService: ObservableObject {
             let pid = pidNumber.int32Value
             guard pid != ownPID, layer.intValue == 0, !seenPIDs.contains(pid), cgFrame.width >= 180, cgFrame.height >= 100 else { continue }
             if let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, configuration.excludedBundleIdentifiers.contains(bundleID) { continue }
-            guard let match = accessibleWindow(for: pid, closestTo: cgFrame), let screen = screen(containing: cgFrame) else { continue }
+            let candidates: [(element: AXUIElement, frame: CGRect)]
+            if let cached = accessibleByPID[pid] { candidates = cached }
+            else {
+                let loaded = accessibleWindows(for: pid)
+                accessibleByPID[pid] = loaded
+                candidates = loaded
+            }
+            let used = usedAccessibleIndices[pid] ?? []
+            guard let matchIndex = candidates.indices.filter({ !used.contains($0) }).min(by: {
+                frameDistance(candidates[$0].frame, cgFrame) < frameDistance(candidates[$1].frame, cgFrame)
+            }), let screen = screen(containing: cgFrame) else { continue }
+            usedAccessibleIndices[pid, default: []].insert(matchIndex)
             seenPIDs.insert(pid)
+            let match = candidates[matchIndex]
             result.append(ManagedWindow(id: CGWindowID(windowNumber.uint32Value), pid: pid, element: match.element, frame: match.frame, screen: screen))
         }
         return result
     }
 
-    private func accessibleWindow(for pid: pid_t, closestTo target: CGRect) -> (element: AXUIElement, frame: CGRect)? {
+    private func accessibleWindows(for pid: pid_t) -> [(element: AXUIElement, frame: CGRect)] {
         let application = AXUIElementCreateApplication(pid)
-        guard let windows: [AXUIElement] = attribute(application, kAXWindowsAttribute as CFString) else { return nil }
-        var best: (AXUIElement, CGRect, CGFloat)?
-
-        for window in windows {
+        guard let windows: [AXUIElement] = attribute(application, kAXWindowsAttribute as CFString) else { return [] }
+        return windows.compactMap { window in
             guard (attribute(window, kAXRoleAttribute as CFString) as String?) == (kAXWindowRole as String),
                   (attribute(window, kAXSubroleAttribute as CFString) as String?) == (kAXStandardWindowSubrole as String),
                   attribute(window, kAXMinimizedAttribute as CFString) as Bool? != true,
                   attribute(window, "AXFullScreen" as CFString) as Bool? != true,
                   isSettable(kAXPositionAttribute as CFString, on: window),
                   isSettable(kAXSizeAttribute as CFString, on: window),
-                  let frame = frame(of: window) else { continue }
-            let distance = abs(frame.minX - target.minX) + abs(frame.minY - target.minY) + abs(frame.width - target.width) + abs(frame.height - target.height)
-            if best == nil || distance < best!.2 { best = (window, frame, distance) }
+                  let frame = frame(of: window) else { return nil }
+            return (window, frame)
         }
-        guard let best else { return nil }
-        return (best.0, best.1)
+    }
+
+    private func frameDistance(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        abs(lhs.minX - rhs.minX) + abs(lhs.minY - rhs.minY) + abs(lhs.width - rhs.width) + abs(lhs.height - rhs.height)
     }
 
     private func isSettable(_ attribute: CFString, on element: AXUIElement) -> Bool {

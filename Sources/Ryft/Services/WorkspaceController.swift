@@ -11,11 +11,41 @@ struct WorkspaceController {
         down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
     }
 
-    static func requestAccessibility() {
-        // Never invoke kAXTrustedCheckOptionPrompt: repeated local builds can
-        // otherwise look like unsolicited requests. Permission remains a user
-        // decision in the macOS pane opened by this explicit action.
-        NSApp.keyWindow?.orderOut(nil)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) }
+    static func requestAccessibility() { openPrivacyPane("Privacy_Accessibility") }
+
+    static func openPrivacyPane(_ pane: String) {
+        openSystemSettings([
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?\(pane)",
+            "x-apple.systempreferences:com.apple.preference.security?\(pane)"
+        ])
+    }
+
+    static func openNotifications() {
+        openSystemSettings([
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+            "x-apple.systempreferences:com.apple.preference.notifications"
+        ])
+    }
+
+    static func openMissionControlShortcuts() {
+        openSystemSettings([
+            "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts",
+            "x-apple.systempreferences:com.apple.preference.keyboard?Shortcuts"
+        ])
+    }
+
+    private static func openSystemSettings(_ candidates: [String]) {
+        let urls = candidates.compactMap(URL.init(string:))
+        guard let first = urls.first else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open(first, configuration: configuration) { _, error in
+            if error != nil, let fallback = urls.dropFirst().first {
+                NSWorkspace.shared.open(fallback)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences").first?.activate(options: [.activateAllWindows])
+            }
+        }
     }
 }

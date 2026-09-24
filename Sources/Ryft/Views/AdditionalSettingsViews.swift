@@ -361,7 +361,7 @@ struct GeneralSettingsView: View {
                 detail: "Command+M and editable global shortcuts.",
                 symbol: "keyboard",
                 granted: permissions.inputMonitoringGranted
-            ) { openPrivacyPane("Privacy_ListenEvent") }
+            ) { WorkspaceController.openPrivacyPane("Privacy_ListenEvent") }
             Divider()
             permissionRow(
                 "Location for Wi-Fi",
@@ -371,7 +371,7 @@ struct GeneralSettingsView: View {
             ) {
                 let status = CLLocationManager().authorizationStatus
                 if status == .notDetermined { model.controls.requestWiFiAccessAndScan() }
-                else { openPrivacyPane("Privacy_LocationServices") }
+                else { WorkspaceController.openPrivacyPane("Privacy_LocationServices") }
             }
             Divider()
             permissionRow(
@@ -381,7 +381,7 @@ struct GeneralSettingsView: View {
                 granted: RyftPermissionStatus.notificationsGranted(status: notifications.authorizationStatus)
             ) {
                 if notifications.authorizationStatus == "Not requested" { notifications.requestAuthorization() }
-                else if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") { NSWorkspace.shared.open(url) }
+                else { WorkspaceController.openNotifications() }
             }
             Divider()
             permissionRow(
@@ -390,7 +390,7 @@ struct GeneralSettingsView: View {
                 symbol: "rectangle.on.rectangle",
                 granted: permissions.screenRecordingGranted
             ) {
-                openPrivacyPane("Privacy_ScreenCapture")
+                WorkspaceController.openPrivacyPane("Privacy_ScreenCapture")
             }
             Text("A red dot beside General remains visible while any permission needs attention. Select Review to open the matching macOS control.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -443,15 +443,4 @@ struct GeneralSettingsView: View {
         .padding(.vertical, 3)
     }
 
-    private func openPrivacyPane(_ pane: String) {
-        NSApp.keyWindow?.orderOut(nil)
-        let legacy = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
-        let modern = URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?\(pane)")
-        let target = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 13 ? (modern ?? legacy) : legacy
-        guard let target else { return }
-        NSWorkspace.shared.open(target, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-            guard error != nil, let legacy, legacy != target else { return }
-            NSWorkspace.shared.open(legacy)
-        }
-    }
 }

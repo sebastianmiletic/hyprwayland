@@ -21,6 +21,9 @@ struct ThemePalette: Codable, Equatable, Identifiable {
 enum BarPresentation: String, Codable, CaseIterable, Identifiable {
     case floating = "Floating", edges = "Touching edges", top = "Flush with edges"
     var id: String { rawValue }
+    var settingsLabel: String {
+        switch self { case .floating: "Floating"; case .edges: "Full width"; case .top: "Flush" }
+    }
 }
 enum BarPosition: String, Codable, CaseIterable, Identifiable {
     case top = "Top", bottom = "Bottom", left = "Left", right = "Right"

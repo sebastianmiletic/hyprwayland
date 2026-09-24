@@ -523,7 +523,7 @@ final class GeminiService: ObservableObject {
 }
 
 private final class GeminiKeychain {
-    private let service = "app.ryft.desktop.gemini"
+    private let service = "com.sebastianmiletic.ryft.gemini"
     // A new account avoids inheriting access-control lists from development
     // builds that could trigger a macOS login-password dialog. Users paste the
     // API key once; stable signed updates can then read it without interaction.

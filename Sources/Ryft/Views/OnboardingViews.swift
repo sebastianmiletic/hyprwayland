@@ -22,23 +22,21 @@ struct PermissionsSettingsView: View {
                 }
                 Divider()
                 permissionRow("Input Monitoring", detail: "Supports Command+M and any editable global shortcuts that require keyboard monitoring.", symbol: "keyboard", status: CGPreflightListenEventAccess() ? "Allowed" : "Not allowed", granted: CGPreflightListenEventAccess()) {
-                    _ = CGRequestListenEventAccess()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { model.statusMessage = "Permission status refreshed" }
+                    WorkspaceController.openPrivacyPane("Privacy_ListenEvent")
                 }
                 Divider()
                 permissionRow("Location for Wi-Fi", detail: "macOS requires Location to reveal nearby network names. Ryft does not store location data.", symbol: "location", status: locationLabel, granted: locationGranted) {
-                    model.controls.requestWiFiAccessAndScan()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { model.statusMessage = "Permission status refreshed" }
+                    if CLLocationManager().authorizationStatus == .notDetermined { model.controls.requestWiFiAccessAndScan() }
+                    else { WorkspaceController.openPrivacyPane("Privacy_LocationServices") }
                 }
                 Divider()
                 permissionRow("Notifications", detail: "Shows Ryft battery warnings. Other apps’ notifications remain private.", symbol: "bell", status: notifications.authorizationStatus, granted: notifications.authorizationStatus == "Enabled") {
-                    notifications.requestAuthorization()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { model.statusMessage = "Permission status refreshed" }
+                    if notifications.authorizationStatus == "Not requested" { notifications.requestAuthorization() }
+                    else { WorkspaceController.openNotifications() }
                 }
                 Divider()
                 permissionRow("Screen Recording", detail: "Captures a temporary in-memory frame for workspace slides or Command+M when no text is selected. Frames are never saved.", symbol: "rectangle.on.rectangle", status: CGPreflightScreenCaptureAccess() ? "Allowed" : "Not allowed", granted: CGPreflightScreenCaptureAccess()) {
-                    let granted = CGRequestScreenCaptureAccess()
-                    model.statusMessage = granted ? "Screen Recording enabled" : "Screen Recording permission unchanged"
+                    WorkspaceController.openPrivacyPane("Privacy_ScreenCapture")
                 }
             }
             if !model.configuration.hasCompletedOnboarding {

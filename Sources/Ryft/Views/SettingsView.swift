@@ -3,8 +3,6 @@ import UniformTypeIdentifiers
 import Darwin
 
 private final class SettingsHoverState: ObservableObject { @Published var hovered = false }
-private final class SettingsNavigationState: ObservableObject { @Published var visibility: NavigationSplitViewVisibility = .all }
-
 private extension View {
     @ViewBuilder func hidingSystemSidebarToggle() -> some View {
         if #available(macOS 14.0, *) { self.toolbar(removing: .sidebarToggle) }
@@ -32,8 +30,6 @@ struct SettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var notifications: NotificationDaemon
     @ObservedObject private var permissions: RyftPermissionMonitor
-    @StateObject private var navigation = SettingsNavigationState()
-
     init(model: AppModel) {
         self.model = model
         notifications = model.notifications
@@ -45,13 +41,19 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $navigation.visibility) {
+        NavigationSplitView {
             VStack(alignment: .leading, spacing: 5) {
-                HStack {
-                    Spacer()
-                    Button { navigation.visibility = .detailOnly } label: { Image(systemName: "sidebar.left").frame(width: 28, height: 28) }
-                        .buttonStyle(SettingsHoverButtonStyle()).help("Hide sidebar")
-                }.padding(.horizontal, 4).padding(.bottom, 5)
+                Button { model.selectedSection = .home } label: {
+                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                        .resizable().scaledToFit().frame(width: 40, height: 40)
+                        .padding(3)
+                        .background(model.selectedSection == .home ? Color(hex: model.configuration.bar.palette.accent).opacity(0.14) : .clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                }
+                .buttonStyle(SettingsHoverButtonStyle())
+                .help("Open desktop overview")
+                .accessibilityLabel("Ryft overview")
+                .padding(.horizontal, 7).padding(.bottom, 7)
                 ForEach(AppSection.allCases.filter { section in
                     section != .home && section != .permissions && section != .guide
                 }) { section in
@@ -89,12 +91,6 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
             }.background(Color.primary.opacity(0.018))
-                .overlay(alignment: .topLeading) {
-                    if navigation.visibility == .detailOnly {
-                        Button { navigation.visibility = .all } label: { Image(systemName: "sidebar.left").frame(width: 30, height: 30) }
-                            .buttonStyle(SettingsHoverButtonStyle()).help("Show sidebar").padding(8)
-                    }
-                }
         }
         .hidingSystemSidebarToggle()
         .background(.regularMaterial)
@@ -209,12 +205,12 @@ struct TilingSettingsView: View {
                 Text("Excluded apps keep their own position and size and do not occupy a Dwindle slot.").font(.caption).foregroundStyle(.secondary)
             }
             SettingsGroup("When Ryft rearranges windows") {
-                Label("One resizable application fills the complete safe work area.", systemImage: "rectangle")
-                Label("Opening a second application smoothly moves and resizes both windows into equal halves.", systemImage: "rectangle.split.2x1")
-                Label("A third application splits the right pane into two stacked halves; later apps keep splitting the remaining pane.", systemImage: "rectangle.split.2x2")
+                Label("One visible application fills the complete safe work area.", systemImage: "rectangle")
+                Label("A second application smoothly moves and resizes both windows into equal halves.", systemImage: "rectangle.split.2x1")
+                Label("A third application splits the right pane; later applications keep splitting the remaining pane.", systemImage: "rectangle.split.2x2")
                 Label("The bar, Dock, display edges, fullscreen, minimized, and fixed-size windows stay clear.", systemImage: "arrow.down.right.and.arrow.up.left")
                 Label("Closing back to one application restores its original frame.", systemImage: "arrow.uturn.backward")
-                Text("Ryft manages one standard window per visible application on each display and only on the active Mission Control desktop. Every frame stays inside the display, below the Ryft bar, and clear of the Dock. Turn tiling off to restore original frames and stop automatic placement.")
+                Text("Ryft manages the primary resizable window from every visible application on each display of the active Mission Control desktop. Changing the bar edge or size immediately reflows all managed applications so none overlap the bar, menu-bar cover, Dock, or display boundary. Turn tiling off to restore original frames and stop automatic placement.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -361,8 +357,8 @@ struct BarSettingsView: View {
         let edge: String
         switch model.configuration.bar.presentation {
         case .floating: edge = "Floating leaves breathing room around the bar."
-        case .edges: edge = "Touching edges spans the display while retaining an outer gap."
-        case .top: edge = "Flush with edges attaches the bar directly to the selected display edge."
+        case .edges: edge = "Full width spans the display while keeping a gap from the selected edge."
+        case .top: edge = "Flush removes all outer gaps and attaches directly to the display edge."
         }
         return "\(model.configuration.bar.position.rawValue) edge. \(edge) Tiled windows automatically use the remaining work area."
     }
@@ -389,7 +385,7 @@ struct BarSettingsView: View {
             SettingsGroup("Placement") {
                 Toggle("Show desktop bar", isOn: $model.configuration.bar.enabled)
                 Picker("Display edge", selection: $model.configuration.bar.position) { ForEach(BarPosition.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
-                Picker("Edge style", selection: $model.configuration.bar.presentation) { ForEach(BarPresentation.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented)
+                Picker("Bar fit", selection: $model.configuration.bar.presentation) { ForEach(BarPresentation.allCases) { Text($0.settingsLabel).tag($0) } }.pickerStyle(.segmented)
                 Text(placementDescription).font(.caption).foregroundStyle(.secondary)
                 Toggle("Show on every display", isOn: $model.configuration.bar.showOnAllDisplays)
                 if model.configuration.bar.position == .top {
@@ -516,7 +512,7 @@ struct ModuleSettingsView: View {
             Toggle("Show app icons instead of numbers", isOn: $model.configuration.bar.showWorkspaceAppIcons)
             Text("A desktop with an application shows its frontmost app icon in a circular button. Empty desktops keep their number.").font(.caption).foregroundStyle(.secondary)
             Text("Desktop buttons send macOS Control+Number. Enable matching shortcuts in System Settings, Keyboard, Keyboard Shortcuts, Mission Control.").font(.caption).foregroundStyle(.secondary)
-            Button("Open Accessibility Settings") { WorkspaceController.requestAccessibility() }
+            Button("Open Mission Control Shortcuts") { WorkspaceController.openMissionControlShortcuts() }
         }
     }
     private func add(_ kind: WidgetKind) {
