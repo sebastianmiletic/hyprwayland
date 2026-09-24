@@ -123,7 +123,10 @@ final class BarPanelController {
         // Native status items can share mainMenu + 1. Keep the wallpaper crop
         // above every Apple menu-bar surface, while Ryft remains one level higher.
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
-        panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = false; panel.hidesOnDeactivate = false; panel.ignoresMouseEvents = true
+        // Stay fully opaque even while a large wallpaper is being decoded.
+        // Black is only a failure fallback; WallpaperCropView paints the exact
+        // per-Space crop over it as soon as the image is available.
+        panel.backgroundColor = .black; panel.isOpaque = true; panel.hasShadow = false; panel.hidesOnDeactivate = false; panel.ignoresMouseEvents = true
         // Belong to the current Space rather than remaining stationary across
         // every Space. During a swipe, each cover therefore travels with the
         // wallpaper it was cropped from instead of bleeding into the next one.
@@ -139,7 +142,7 @@ final class BarPanelController {
         // The panel travels with the active Space and its crop is replaced as
         // soon as NSWorkspace publishes the destination wallpaper.
         guard !coversWaitingForWallpaper.contains(ObjectIdentifier(panel)) else {
-            if !panel.isVisible { panel.orderFrontRegardless() }
+            panel.orderFrontRegardless()
             return
         }
         // Cover the native menu-bar row for every Ryft edge, including behind
@@ -158,7 +161,10 @@ final class BarPanelController {
         coversWaitingForWallpaper = Set(entries.map { ObjectIdentifier($0.menuBarCoverPanel) })
         // Never remove the cover between Spaces. Keeping it opaque prevents a
         // one-frame flash of Apple's menu bar while wallpaper metadata catches up.
-        entries.forEach { if !$0.menuBarCoverPanel.isVisible { $0.menuBarCoverPanel.orderFrontRegardless() } }
+        // orderFrontRegardless is intentional even when AppKit reports the
+        // panel as visible: a visible moveToActiveSpace panel may still belong
+        // to the outgoing Space until it is explicitly ordered on the new one.
+        entries.forEach { $0.menuBarCoverPanel.orderFrontRegardless() }
         // Poll on the first transition frames instead of waiting for coarse
         // retries. NSWorkspace usually exposes the destination wallpaper within
         // one or two frames; later attempts cover slower Mission Control paths.
