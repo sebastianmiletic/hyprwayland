@@ -62,10 +62,10 @@ final class GeminiService: ObservableObject {
         GeminiModel(id: "gemma-4-31b-it", name: "Gemma 4 31B", quota: 14_400),
         GeminiModel(id: "gemma-4-26b-it", name: "Gemma 4 26B", quota: 14_400)
     ]
-    private let routerVersion = 3
+    private let routerVersion = 4
     private var usageCounts: [String: Int] = [:]
-    private var unavailableModels = Set<String>()
-    private var screenUnavailableModels = Set<String>()
+    private var modelRetryAfter: [String: Date] = [:]
+    private var screenRetryAfter: [String: Date] = [:]
     private var usageDate = ""
     private let usageURL: URL
     private let historyURL: URL
@@ -139,11 +139,12 @@ final class GeminiService: ObservableObject {
         hasAPIKey = true
         screenRequestTask?.cancel()
         resetUsageIfNeeded()
-        guard let first = models.firstIndex(where: { usageCounts[$0.id, default: 0] < $0.quota && !unavailableModels.contains($0.id) && !screenUnavailableModels.contains($0.id) }) else {
-            completion(.failure(NSError(domain: "Ryft.Gemini", code: 2, userInfo: [NSLocalizedDescriptionKey: "No Gemini model quota is currently available."])))
-            return
+        let first = models.firstIndex(where: { modelIsReady($0, forScreen: true) }) ?? 0
+        if !modelIsReady(models[first], forScreen: true) {
+            modelRetryAfter[models[first].id] = nil
+            screenRetryAfter[models[first].id] = nil
         }
-        requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: first, deadline: Date().addingTimeInterval(12), completion: completion)
+        requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: first, deadline: Date().addingTimeInterval(18), completion: completion)
     }
 
     func send() {
@@ -153,18 +154,17 @@ final class GeminiService: ObservableObject {
         hasAPIKey = true; messages.append(ChatMessage(role: "user", text: prompt)); saveHistory(); draft = ""; isLoading = true; errorMessage = ""
         chatDeadline = Date().addingTimeInterval(15)
         resetUsageIfNeeded()
-        guard let first = models.firstIndex(where: { usageCounts[$0.id, default: 0] < $0.quota && !unavailableModels.contains($0.id) }) else {
-            isLoading = false; errorMessage = "No AI model quota is currently available."; return
-        }
+        let first = models.firstIndex(where: { modelIsReady($0, forScreen: false) }) ?? 0
+        if !modelIsReady(models[first], forScreen: false) { modelRetryAfter[models[first].id] = nil }
         request(apiKey: apiKey, modelIndex: first)
     }
 
     private func request(apiKey: String, modelIndex: Int) {
         guard modelIndex < models.count, chatDeadline.timeIntervalSinceNow > 0.5 else { isLoading = false; errorMessage = "Gemini is temporarily unavailable. Try again."; return }
         let model = models[modelIndex]
-        if usageCounts[model.id, default: 0] >= model.quota || unavailableModels.contains(model.id) { request(apiKey: apiKey, modelIndex: modelIndex + 1); return }
+        if !modelIsReady(model, forScreen: false) { request(apiKey: apiKey, modelIndex: modelIndex + 1); return }
         currentModelID = model.id
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model.id):generateContent") else { unavailableModels.insert(model.id); failover(apiKey: apiKey, next: modelIndex + 1); return }
+        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model.id):generateContent") else { modelRetryAfter[model.id] = Date().addingTimeInterval(3600); failover(apiKey: apiKey, next: modelIndex + 1); return }
         var request = URLRequest(url: url); request.httpMethod = "POST"; request.timeoutInterval = min(6, max(1, chatDeadline.timeIntervalSinceNow))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
@@ -182,7 +182,7 @@ final class GeminiService: ObservableObject {
                 self.requestTask = nil
                 if let urlError = error as? URLError, urlError.code == .cancelled { self.isLoading = false; return }
                 if let urlError = error as? URLError, urlError.code == .timedOut {
-                    self.unavailableModels.insert(model.id); self.saveUsage()
+                    self.modelRetryAfter[model.id] = Date().addingTimeInterval(60); self.saveUsage()
                     self.failover(apiKey: apiKey, next: modelIndex + 1, finalMessage: "Gemini did not respond in time.")
                     return
                 }
@@ -206,6 +206,7 @@ final class GeminiService: ObservableObject {
                     self.inputTokens = usage["promptTokenCount"] as? Int ?? 0
                     self.outputTokens = usage["candidatesTokenCount"] as? Int ?? 0
                 }
+                self.modelRetryAfter[model.id] = nil
                 self.reserve(model)
                 self.messages.append(ChatMessage(role: "model", text: self.bulletize(text), model: model.id)); self.isLoading = false; self.errorMessage = ""; self.saveHistory()
             }
@@ -219,7 +220,7 @@ final class GeminiService: ObservableObject {
             return
         }
         let model = models[modelIndex]
-        if usageCounts[model.id, default: 0] >= model.quota || unavailableModels.contains(model.id) || screenUnavailableModels.contains(model.id) {
+        if !modelIsReady(model, forScreen: true) {
             requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, deadline: deadline, completion: completion)
             return
         }
@@ -230,7 +231,7 @@ final class GeminiService: ObservableObject {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = min(5, max(1, deadline.timeIntervalSinceNow))
+        request.timeoutInterval = min(8, max(1, deadline.timeIntervalSinceNow))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         let prompt = """
@@ -256,7 +257,7 @@ final class GeminiService: ObservableObject {
                 self.screenRequestTask = nil
                 if let urlError = error as? URLError, urlError.code == .cancelled { return }
                 if let urlError = error as? URLError, urlError.code == .timedOut {
-                    self.screenUnavailableModels.insert(model.id); self.saveUsage()
+                    self.screenRetryAfter[model.id] = Date().addingTimeInterval(60); self.saveUsage()
                     self.requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, deadline: deadline, completion: completion)
                     return
                 }
@@ -280,6 +281,8 @@ final class GeminiService: ObservableObject {
                     }
                     return
                 }
+                self.modelRetryAfter[model.id] = nil
+                self.screenRetryAfter[model.id] = nil
                 self.reserve(model)
                 completion(.success(self.parseScreenAnswer(raw)))
             }
@@ -311,20 +314,39 @@ final class GeminiService: ObservableObject {
         else { isLoading = false; errorMessage = finalMessage ?? "No AI model quota is currently available." }
     }
 
+    private func modelIsReady(_ model: GeminiModel, forScreen: Bool) -> Bool {
+        let now = Date()
+        if let retry = modelRetryAfter[model.id], retry > now { return false }
+        if forScreen, let retry = screenRetryAfter[model.id], retry > now { return false }
+        return true
+    }
+
     private func recordFailure(_ model: GeminiModel, status: Int, screenOnly: Bool = false) {
-        if status == 429 { usageCounts[model.id] = model.quota }
-        else if status == 404 { unavailableModels.insert(model.id) }
-        else if screenOnly { screenUnavailableModels.insert(model.id) }
-        else if (400..<500).contains(status) { unavailableModels.insert(model.id) }
+        let now = Date()
+        if status == 429 {
+            usageCounts[model.id] = model.quota
+            modelRetryAfter[model.id] = now.addingTimeInterval(60)
+        } else if status == 404 {
+            modelRetryAfter[model.id] = now.addingTimeInterval(3600)
+        } else if screenOnly {
+            screenRetryAfter[model.id] = now.addingTimeInterval(status >= 500 ? 60 : 300)
+        } else if (400..<500).contains(status) {
+            modelRetryAfter[model.id] = now.addingTimeInterval(300)
+        } else if status >= 500 {
+            modelRetryAfter[model.id] = now.addingTimeInterval(60)
+        }
         saveUsage()
     }
 
-    private func reserve(_ model: GeminiModel) { usageCounts[model.id, default: 0] += 1; saveUsage() }
+    private func reserve(_ model: GeminiModel) {
+        usageCounts[model.id] = usageCounts[model.id, default: 0] >= model.quota ? 1 : usageCounts[model.id, default: 0] + 1
+        saveUsage()
+    }
 
     private func resetUsageIfNeeded() {
         let today = Self.today
         if usageDate != today {
-            usageDate = today; usageCounts = [:]; unavailableModels = []; screenUnavailableModels = []; saveUsage()
+            usageDate = today; usageCounts = [:]; modelRetryAfter = [:]; screenRetryAfter = [:]; saveUsage()
         }
     }
 
@@ -332,15 +354,22 @@ final class GeminiService: ObservableObject {
         if let data = try? Data(contentsOf: usageURL),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            object["date"] as? String == Self.today,
-           object["routerVersion"] as? Int == routerVersion {
+           (object["routerVersion"] as? Int ?? 0) >= 3 {
             usageDate = Self.today
             usageCounts = object["counts"] as? [String: Int] ?? [:]
-            unavailableModels = Set(object["unavailable"] as? [String] ?? [])
-            screenUnavailableModels = Set(object["screenUnavailable"] as? [String] ?? [])
+            let now = Date()
+            modelRetryAfter = (object["retryAfter"] as? [String: Double] ?? [:]).reduce(into: [:]) { result, entry in
+                let date = Date(timeIntervalSince1970: entry.value)
+                if date > now { result[entry.key] = date }
+            }
+            screenRetryAfter = (object["screenRetryAfter"] as? [String: Double] ?? [:]).reduce(into: [:]) { result, entry in
+                let date = Date(timeIntervalSince1970: entry.value)
+                if date > now { result[entry.key] = date }
+            }
         } else {
-            usageDate = Self.today; usageCounts = [:]; unavailableModels = []; screenUnavailableModels = []
-            saveUsage()
+            usageDate = Self.today; usageCounts = [:]; modelRetryAfter = [:]; screenRetryAfter = [:]
         }
+        saveUsage()
         publishUsage()
     }
 
@@ -349,8 +378,8 @@ final class GeminiService: ObservableObject {
             "routerVersion": routerVersion,
             "date": usageDate,
             "counts": usageCounts,
-            "unavailable": Array(unavailableModels).sorted(),
-            "screenUnavailable": Array(screenUnavailableModels).sorted()
+            "retryAfter": modelRetryAfter.mapValues(\.timeIntervalSince1970),
+            "screenRetryAfter": screenRetryAfter.mapValues(\.timeIntervalSince1970)
         ]
         if let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]) { try? data.write(to: usageURL, options: .atomic) }
         publishUsage()
