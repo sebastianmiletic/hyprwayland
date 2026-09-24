@@ -41,10 +41,15 @@ final class DwindleTilingService: ObservableObject {
     private var originalWindows: [CGWindowID: OriginalWindow] = [:]
     private var windowOrder: [CGWindowID: Int] = [:]
     private var nextOrder = 0
+    private var appliedLayoutSignature: [String] = []
+    private var pendingLayoutSignature: [String] = []
+    private var pendingLayoutObservations = 0
+    private var forceNextLayout = true
 
     func setEnabled(_ value: Bool) {
         enabled = value
         if value {
+            forceNextLayout = true
             running = true
             status = AXIsProcessTrusted() ? "Waiting for an application" : "Accessibility permission needed"
             startTimer()
@@ -59,12 +64,16 @@ final class DwindleTilingService: ObservableObject {
     }
 
     func updateBarConfiguration(_ configuration: BarConfiguration) {
+        guard bar != configuration else { return }
         bar = configuration
+        forceNextLayout = true
         if enabled { tileVisibleApplications() }
     }
 
     func updateConfiguration(_ configuration: TilingConfiguration) {
+        guard self.configuration != configuration else { return }
         self.configuration = configuration
+        forceNextLayout = true
         if enabled { tileVisibleApplications() }
     }
 
@@ -100,6 +109,25 @@ final class DwindleTilingService: ObservableObject {
         }
 
         let windows = visibleApplicationWindows()
+        let signature = windows
+            .map { "\($0.id):\(displayID(for: $0.screen))" }
+            .sorted()
+        if !forceNextLayout, signature != appliedLayoutSignature {
+            if signature == pendingLayoutSignature {
+                pendingLayoutObservations += 1
+            } else {
+                pendingLayoutSignature = signature
+                pendingLayoutObservations = 1
+            }
+            // Ignore one-off CGWindowList omissions and transient windows. A
+            // membership/display change must survive two consecutive polls.
+            guard pendingLayoutObservations >= 2 else { return }
+        }
+        forceNextLayout = false
+        appliedLayoutSignature = signature
+        pendingLayoutSignature = []
+        pendingLayoutObservations = 0
+
         let grouped = Dictionary(grouping: windows, by: { displayID(for: $0.screen) })
         var tiledIDs = Set<CGWindowID>()
         var tiledApplicationCount = 0
@@ -139,7 +167,16 @@ final class DwindleTilingService: ObservableObject {
 
     private func visibleApplicationWindows() -> [ManagedWindow] {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
-        guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[CFString: Any]] else { return [] }
+        guard let rawList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[CFString: Any]] else { return [] }
+        // Keep managing the same window when an application temporarily raises
+        // another standard panel or reorders its CG window list.
+        let list = rawList.enumerated().sorted { lhs, rhs in
+            let lhsID = (lhs.element[kCGWindowNumber] as? NSNumber).map { CGWindowID($0.uint32Value) }
+            let rhsID = (rhs.element[kCGWindowNumber] as? NSNumber).map { CGWindowID($0.uint32Value) }
+            let lhsKnown = lhsID.map { windowOrder[$0] != nil } ?? false
+            let rhsKnown = rhsID.map { windowOrder[$0] != nil } ?? false
+            return lhsKnown == rhsKnown ? lhs.offset < rhs.offset : lhsKnown
+        }.map(\.element)
         let ownPID = ProcessInfo.processInfo.processIdentifier
         var seenPIDs = Set<pid_t>()
         var result: [ManagedWindow] = []
@@ -312,7 +349,10 @@ final class DwindleTilingService: ObservableObject {
     private func availableFrame(for screen: NSScreen) -> CGRect {
         let display = displayBounds(for: screen)
         let mainMaxY = CGDisplayBounds(CGMainDisplayID()).maxY
-        let visible = screen.visibleFrame
+        // A hidden Dock can change visibleFrame whenever the pointer reaches
+        // its edge. Auto-hide must not continuously resize every tiled window.
+        let dockAutoHides = UserDefaults(suiteName: "com.apple.dock")?.bool(forKey: "autohide") ?? false
+        let visible = dockAutoHides ? screen.frame : screen.visibleFrame
         let visibleTop = mainMaxY - visible.maxY
         let visibleBottom = mainMaxY - visible.minY
         var frame = CGRect(

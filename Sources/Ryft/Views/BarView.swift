@@ -194,6 +194,52 @@ private struct WidgetZoneDropDelegate: DropDelegate {
     }
 }
 
+private struct MarqueeAnswerText: View {
+    let text: String
+    let startedAt: Date
+    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    private var textWidth: CGFloat { ScreenAnswerMarqueeMetrics.textWidth(text) }
+
+    var body: some View {
+        Group {
+            if !ScreenAnswerMarqueeMetrics.isLong(text) {
+                answerLabel
+            } else if reduceMotion {
+                Text(text)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+                    .frame(width: ScreenAnswerMarqueeMetrics.viewportWidth, alignment: .leading)
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                    let elapsed = context.date.timeIntervalSince(startedAt)
+                    let active = max(0, elapsed - ScreenAnswerMarqueeMetrics.initialPause)
+                    let distance = textWidth + ScreenAnswerMarqueeMetrics.gap
+                    let cycle = TimeInterval(distance / ScreenAnswerMarqueeMetrics.speed)
+                    let finished = active >= cycle * Double(ScreenAnswerMarqueeMetrics.repetitions)
+                    let progress = cycle > 0 ? active.truncatingRemainder(dividingBy: cycle) / cycle : 0
+                    HStack(spacing: ScreenAnswerMarqueeMetrics.gap) {
+                        answerLabel
+                        answerLabel.accessibilityHidden(true)
+                    }
+                    .offset(x: -CGFloat(progress) * distance)
+                    .opacity(finished ? 0 : 1)
+                }
+                .frame(width: ScreenAnswerMarqueeMetrics.viewportWidth, alignment: .leading)
+                .clipped()
+            }
+        }
+        .accessibilityLabel(text)
+    }
+
+    private var answerLabel: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .medium))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
 private struct PulsingSparkle: View {
     private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     var body: some View {
@@ -338,7 +384,8 @@ private struct WidgetView: View {
                 } else {
                     HStack(spacing: 7) {
                         WidgetIcon(value: "sparkle")
-                        Text(model.screenAnswer).lineLimit(1).truncationMode(.tail).frame(maxWidth: 180, alignment: .leading)
+                        MarqueeAnswerText(text: model.screenAnswer, startedAt: model.screenAnswerStartedAt)
+                            .id(model.screenAnswer)
                     }
                     .foregroundStyle(.white).frame(maxWidth: 205, alignment: .leading).clipped()
                     .transition(.move(edge: .leading).combined(with: .opacity))

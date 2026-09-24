@@ -4,6 +4,26 @@ import ServiceManagement
 import UniformTypeIdentifiers
 import CoreWLAN
 
+enum ScreenAnswerMarqueeMetrics {
+    static let viewportWidth: CGFloat = 180
+    static let gap: CGFloat = 30
+    static let speed: CGFloat = 46
+    static let initialPause: TimeInterval = 0.65
+    static let repetitions = 2
+
+    static func textWidth(_ text: String) -> CGFloat {
+        ceil((text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)]).width)
+    }
+
+    static func isLong(_ text: String) -> Bool { textWidth(text) > viewportWidth }
+
+    static func displayDuration(for text: String) -> TimeInterval {
+        guard isLong(text), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return 8 }
+        let cycle = TimeInterval((textWidth(text) + gap) / speed)
+        return initialPause + cycle * Double(repetitions) + 0.15
+    }
+}
+
 final class AppModel: ObservableObject {
     static let shared = AppModel()
 
@@ -34,6 +54,7 @@ final class AppModel: ObservableObject {
     @Published var screenAnswer = ""
     @Published var screenAnswerIsChoice = false
     @Published var screenAnswerLoading = false
+    @Published var screenAnswerStartedAt = Date()
     @Published var wallpaperArchiveStatus = ""
     @Published var installingWallpaperArchive = false
     let system = SystemMonitor()
@@ -230,6 +251,7 @@ final class AppModel: ObservableObject {
         switch ScreenQuestionCaptureService.capture() {
         case .failure(let error):
             screenAnswerLoading = false
+            screenAnswerStartedAt = Date()
             screenAnswer = String(error.localizedDescription.prefix(140))
             statusMessage = error.localizedDescription
             scheduleScreenAnswerReset(after: 8)
@@ -239,11 +261,13 @@ final class AppModel: ObservableObject {
                 self.screenAnswerLoading = false
                 switch result {
                 case .success(let answer):
+                    self.screenAnswerStartedAt = Date()
                     self.screenAnswer = answer.text
                     self.screenAnswerIsChoice = answer.isMultipleChoice
                     self.statusMessage = "Answered from the current screen"
-                    self.scheduleScreenAnswerReset(after: answer.isMultipleChoice ? 3 : 8)
+                    self.scheduleScreenAnswerReset(after: answer.isMultipleChoice ? 3 : ScreenAnswerMarqueeMetrics.displayDuration(for: answer.text))
                 case .failure(let error):
+                    self.screenAnswerStartedAt = Date()
                     self.screenAnswer = String(error.localizedDescription.prefix(140))
                     self.screenAnswerIsChoice = false
                     self.statusMessage = error.localizedDescription
