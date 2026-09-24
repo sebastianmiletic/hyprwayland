@@ -234,12 +234,26 @@ final class GeminiService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         let prompt = """
-        Read the primary question in the frontmost application's content. Ignore browser chrome, menus, the Ryft bar, prior AI answers, and unrelated background text.
-        Transcribe the complete question and every option internally before solving it. Solve independently, check facts and calculations, then verify that the chosen letter maps to the exact option text. Silently perform a second pass to catch OCR, negation, and letter-mapping mistakes.
-        For multiple choice, return exactly CHOICE: followed by one letter from A through E. Return the letter attached to the correct visible option, not its position from memory.
-        For a written question, return exactly ANSWER: followed by the direct answer in at most 16 words.
-        If no question is readable, return exactly ANSWER: No question found.
-        Output no reasoning, Markdown, or additional text.
+        Answer the primary unanswered question in the frontmost application's content. Ignore browser chrome, menus, the Ryft bar, prior AI answers, advertisements, navigation, and unrelated background text. Do not assume a visibly selected response is correct.
+
+        Before answering, silently:
+        1. Read the complete instructions, question, blanks, diagrams, tables, equations, code, word bank, and every visible option.
+        2. Identify the question type: single choice, multiple select, true/false, fill in the blank, word-bank fill, multiple blanks, matching, ordering, calculation, short answer, grammar, translation, code, diagram, or data interpretation.
+        3. Solve it independently. Check negations such as NOT or EXCEPT, required units, grammar, spelling, tense, capitalization, and whether word-bank entries may be reused.
+        4. Verify the final response against the exact visible wording and constraints. For choices, verify the label maps to the correct option text. For blanks, reread the completed sentence to ensure it is grammatical and factually correct.
+
+        Output rules:
+        - For one multiple-choice answer labelled A through E, output exactly CHOICE: X using the correct letter.
+        - For multiple-select questions, output ANSWER: followed by all required visible labels separated by commas.
+        - For true/false questions, output ANSWER: True or ANSWER: False.
+        - For a fill-in-the-blank question, output only the exact missing word or phrase after ANSWER:.
+        - When a word bank is visible, select exact entries from that bank and preserve their spelling. Never invent a synonym when a bank entry fits.
+        - For multiple blanks, provide answers in blank order separated by " / ".
+        - For matching, use a compact form such as "1-A, 2-C, 3-B". For ordering, list the correct sequence compactly.
+        - For calculations, include the final value and required unit. For code, provide only the missing or requested code.
+        - For every other type, output ANSWER: followed by the shortest complete direct answer, no more than 24 words or 120 characters.
+        - If no question is readable, output exactly ANSWER: No question found.
+        - Never output reasoning, transcription, confidence, Markdown, or commentary.
         """
         let payload: [String: Any] = [
             "contents": [["role": "user", "parts": [
@@ -299,11 +313,17 @@ final class GeminiService: ObservableObject {
         if upper.count == 1, ("A"..."E").contains(upper) {
             return GeminiScreenAnswer(text: upper, isMultipleChoice: true)
         }
-        let answer: String
+        var answer: String
         if let marker = upper.range(of: "ANSWER:") {
+            answer = String(clean[marker.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if let marker = upper.range(of: #"\b(?:BLANK|RESULT|RESPONSE)\s*:"#, options: .regularExpression) {
             answer = String(clean[marker.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         } else {
             answer = clean.trimmingCharacters(in: CharacterSet(charactersIn: "•- "))
+        }
+        if answer.count >= 2,
+           (answer.first == "\"" && answer.last == "\"" || answer.first == "'" && answer.last == "'") {
+            answer.removeFirst(); answer.removeLast()
         }
         return GeminiScreenAnswer(text: String(answer.prefix(140)), isMultipleChoice: false)
     }
