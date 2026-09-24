@@ -64,7 +64,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observers.append(NotificationCenter.default.addObserver(forName: .ryftToggleRightSidebar, object: nil, queue: .main) { [weak self] note in self?.sidePanelController?.toggleRight(detail: note.object as? String ?? "") })
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in NSMenu.setMenuBarVisible(false) })
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self?.hideSettingsAfterSpaceChange() }
+            NSMenu.setMenuBarVisible(false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                NSMenu.setMenuBarVisible(false)
+                self?.hideSettingsAfterSpaceChange()
+            }
         })
         installStatusItem()
         NSMenu.setMenuBarVisible(false)

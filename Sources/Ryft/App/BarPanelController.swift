@@ -131,8 +131,10 @@ final class BarPanelController {
     }
 
     private func updateMenuBarCover(_ panel: NSPanel, on screen: NSScreen, config: BarConfiguration) {
-        guard config.position != .top,
+        guard config.enabled,
               !coversWaitingForWallpaper.contains(ObjectIdentifier(panel)) else { panel.orderOut(nil); return }
+        // Cover the native menu-bar row for every Ryft edge, including behind
+        // a floating top bar. The cover remains one level below Ryft itself.
         // One-pixel overlap removes the hairline that can appear where the
         // synthetic crop meets the native desktop wallpaper at fractional scale.
         let height = ceil(DisplayLayoutMetrics.menuBarHeight(for: screen)) + 1
