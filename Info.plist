@@ -6,7 +6,7 @@
   <key>CFBundleDisplayName</key><string>Ryft</string>
   <key>CFBundleExecutable</key><string>Ryft</string>
   <key>CFBundleIconFile</key><string>Ryft</string>
-  <key>CFBundleIdentifier</key><string>com.sebastianmiletic.ryft</string>
+  <key>CFBundleIdentifier</key><string>app.ryft.desktop</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Ryft</string>
   <key>CFBundlePackageType</key><string>APPL</string>

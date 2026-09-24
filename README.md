@@ -7,12 +7,11 @@
 <p align="center"><strong>A native Hyprland-shaped desktop environment for macOS.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/sebastianmiletic/ryft/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/sebastianmiletic/ryft"></a>
   <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-141313">
   <img alt="Apple Silicon and Intel" src="https://img.shields.io/badge/Mac-Apple%20Silicon%20%7C%20Intel-CBC4CB">
 </p>
 
-Ryft is a native macOS desktop bar and customization app inspired by Hyprland setups. It runs without a Dock icon, renders a notch-aware multi-display bar, and includes built-in Dwindle tiling, Mission Control workspace controls, live widgets, side panels, a wallpaper library, global shortcuts, Gemini, profiles, and a source-faithful Sebastian II Quickshell preset.
+Ryft is a native macOS desktop bar and customization app inspired by Hyprland setups. It runs without a Dock icon, renders a notch-aware multi-display bar, and includes built-in Dwindle tiling, Mission Control workspace controls, live widgets, side panels, a wallpaper library, global shortcuts, Gemini, profiles, and a source-faithful Classic Quickshell preset.
 
 ![Ryft desktop with module-island bar](docs/screenshots/bars/module-islands.jpg)
 
@@ -52,7 +51,7 @@ The same native renderer supports a continuous edge, individual modules, outline
 
 ## Install
 
-Download the matching ZIP from [Releases](https://github.com/sebastianmiletic/ryft/releases/latest):
+Download the matching ZIP from [Releases](../../releases/latest):
 
 - **Apple Silicon** for M1, M2, M3, M4, and newer Macs.
 - **Intel** for Intel-based MacBook, iMac, Mac mini, and Mac Pro models.
@@ -80,7 +79,7 @@ Move `dist/Ryft.app` to `/Applications` to make Launch at Login registration ava
 
 1. Open **Bar**, choose the top, bottom, left, or right display edge, then select **Floating**, **Touching edges**, or **Flush with edges**. Tune thickness, radius, inset, and opacity while the desktop bar updates live.
 2. Ryft reads `NSScreen` safe areas on each display and keeps the center clear on MacBooks with a notch. Enable **Bar avoids notch** to stop the left and right surfaces before the camera area. The preview represents the protected spacing without drawing fake hardware.
-3. **Sebastian II · 1:1** reproduces the source QML's 42pt base height, 5pt outer gap, 4pt center spacing, 18pt rounding, full `bb7de91` palette, source module order, and grouped status treatment. The style library shows one centered production-rendered `BarView` preview per row. Every preview follows the current notch-avoidance choices through spacing and splitting, without drawing a fake notch. Module islands and Nord intentionally have no enclosing bar box.
+3. **Classic · Exact** reproduces the source QML's 42pt base height, 5pt outer gap, 4pt center spacing, 18pt rounding, complete palette, source module order, and grouped status treatment. The style library shows one centered production-rendered `BarView` preview per row. Every preview follows the current notch-avoidance choices through spacing and splitting, without drawing a fake notch. Module islands and Nord intentionally have no enclosing bar box.
 4. **Widgets avoid notch** reserves center space only for controls while keeping a continuous bar surface. **Bar avoids notch** splits the complete bar surface and widgets around the camera area. Enable **Black notch shelf** to paint the physical notch row with opaque RGB `0,0,0` and move the complete Ryft bar below it.
 5. Open **Widgets** to edit the same `BarView` renderer used on the desktop. Drag widgets directly across Far left, Before notch, After notch, and Far right, or use the detailed controls. Every widget has its own SF Symbol or image, visibility, pill style, text color, background, typography, padding, radius, and click action.
 6. Open **Tiling** to enable Ryft’s built-in Hyprland-style Dwindle engine. One resizable application fills the complete safe work area. Two applications receive equal left and right halves. A third keeps the left half intact and splits the right pane into two stacked halves; later applications recursively split the remaining pane along its longest axis. Frames adapt immediately when the bar moves between the top, bottom, left, or right, stop precisely below Ryft’s menu-bar wallpaper cover, and remain clear of the Dock. No helper app, download, extra menu-bar item, or competing shortcut system is used. Reduce Motion switches placement back to immediate updates.

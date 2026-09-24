@@ -1,0 +1,12 @@
+{
+  "name": "Classic native port",
+  "sourcePaths": [
+    ".config/quickshell/ii/modules/ii/bar",
+    ".config/quickshell/ii/modules/ii/sidebarLeft",
+    ".config/quickshell/ii/modules/ii/sidebarRight",
+    ".config/quickshell/ii/modules/ii/wallpaperSelector",
+    ".config/quickshell/ii/services/Wallpapers.qml"
+  ],
+  "note": "Ryft ports the reference Quickshell structure and behavior to AppKit and SwiftUI because QML Wayland panels cannot run on macOS.",
+  "mappedModules": ["left-sidebar", "active-window", "resources", "workspaces", "clock", "wifi", "volume", "battery", "right-sidebar", "settings"]
+}

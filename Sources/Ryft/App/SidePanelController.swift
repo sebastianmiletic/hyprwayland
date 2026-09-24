@@ -20,14 +20,14 @@ final class SidePanelController {
             if self.rightPanel?.isVisible == true { self.resetControlsInactivityTimer() }
             if event.type == .leftMouseDown || event.type == .rightMouseDown {
                 if let panel = self.rightPanel, panel.isVisible, event.window !== panel { self.dismiss(panel, side: .right) }
-                if let panel = self.leftPanel, panel.isVisible, event.window !== panel { self.dismiss(panel, side: .left) }
+                if let panel = self.leftPanel, panel.isVisible, event.window !== panel, !self.model.assistantPanelLocked { self.dismiss(panel, side: .left) }
             }
             return event
         }
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self else { return }
             if let panel = self.rightPanel, panel.isVisible { self.dismiss(panel, side: .right) }
-            if let panel = self.leftPanel, panel.isVisible { self.dismiss(panel, side: .left) }
+            if let panel = self.leftPanel, panel.isVisible, !self.model.assistantPanelLocked { self.dismiss(panel, side: .left) }
         }
     }
 
@@ -39,12 +39,15 @@ final class SidePanelController {
 
     func toggleLeft() {
         if let rightPanel, rightPanel.isVisible { dismiss(rightPanel, side: .right) }
-        if let leftPanel, leftPanel.isVisible { dismiss(leftPanel, side: .left); return }
+        if let leftPanel, leftPanel.isVisible {
+            if !model.assistantPanelLocked { dismiss(leftPanel, side: .left) }
+            return
+        }
         let panel = leftPanel ?? makePanel(side: .left)
         leftPanel = panel; present(panel, side: .left)
     }
     func toggleRight(detail: String = "") {
-        if let leftPanel, leftPanel.isVisible { dismiss(leftPanel, side: .left) }
+        if let leftPanel, leftPanel.isVisible, !model.assistantPanelLocked { dismiss(leftPanel, side: .left) }
         if let rightPanel, rightPanel.isVisible && model.rightSidebarDetail == detail { dismiss(rightPanel, side: .right); return }
         model.rightSidebarDetail = detail
         switch detail { case "Wi-Fi": model.controls.prepareWiFiMenu(); case "Sound": model.controls.prepareSoundMenu(); case "Battery": model.controls.operationMessage = ""; model.controls.refreshPowerState(); default: model.controls.operationMessage = ""; model.controls.refreshAll() }

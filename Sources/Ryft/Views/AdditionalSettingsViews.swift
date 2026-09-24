@@ -81,15 +81,26 @@ struct ShortcutSettingsView: View {
     private let keys = GlobalHotkeyManager.keyCodes.keys.sorted()
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-        SettingsGroup("Built-in shortcut") {
+        SettingsGroup("Built-in shortcuts") {
             fixedShortcut("⌘M", "Secret AI answer", "Uses highlighted question text when available; otherwise reads the focused window. Click a written answer to copy it.")
-            Text("Command+M is protected from accidental deletion. Gemini and Controls sidebars open from their desktop-bar widgets.").font(.caption).foregroundStyle(.secondary)
+            Divider()
+            HStack(spacing: 12) {
+                Text("⌘↩").font(.system(.body, design: .monospaced).weight(.semibold)).frame(width: 42)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Open or control Termatica").fontWeight(.semibold)
+                    Text(TermaticaIntegrationService.isInstalled ? "Launches Termatica. If it is already visible on this desktop, runs its configured Command+T action; otherwise opens a new window here." : "Install Termatica in Applications to enable this shortcut.").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: $model.configuration.termaticaShortcutEnabled).labelsHidden().disabled(!TermaticaIntegrationService.isInstalled)
+            }
+            .opacity(TermaticaIntegrationService.isInstalled ? 1 : 0.42)
+            Text("Termatica keeps using your current config.json profile exactly as configured. Ryft does not copy, rewrite, or merge its terminal settings. Command+M and Command+Enter are protected from accidental deletion.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
         SettingsGroup("Editable shortcuts") {
             ForEach(Array(model.configuration.shortcuts.indices), id: \.self) { index in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Picker("Action", selection: $model.configuration.shortcuts[index].action) { ForEach(ShortcutAction.allCases.filter { $0 != .wallpaper && $0 != .randomWallpaper && $0 != .screenAnswer && $0 != .leftSidebar && $0 != .rightSidebar }) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 170)
+                        Picker("Action", selection: $model.configuration.shortcuts[index].action) { ForEach(ShortcutAction.allCases.filter { $0 != .wallpaper && $0 != .randomWallpaper && $0 != .screenAnswer && $0 != .termatica && $0 != .leftSidebar && $0 != .rightSidebar }) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 170)
                         modifier("⌃", value: $model.configuration.shortcuts[index].control)
                         modifier("⌥", value: $model.configuration.shortcuts[index].option)
                         modifier("⇧", value: $model.configuration.shortcuts[index].shift)
@@ -145,6 +156,7 @@ struct ShortcutSettingsView: View {
         case .leftSidebar: NotificationCenter.default.post(name: .ryftToggleLeftSidebar, object: nil)
         case .rightSidebar: NotificationCenter.default.post(name: .ryftToggleRightSidebar, object: nil)
         case .screenAnswer: model.answerQuestionOnScreen()
+        case .termatica: TermaticaIntegrationService.openOrControl()
         case .quitFrontmost: _ = NSWorkspace.shared.frontmostApplication?.terminate()
         }
     }
@@ -154,11 +166,12 @@ struct WallpaperGalleryView: View {
     @ObservedObject var model: AppModel
     let standalone: Bool
     private var palette: ThemePalette { model.configuration.bar.palette }
-    private var categories: [String] { ["All"] + Array(Set(model.wallpapers.map { $0.deletingLastPathComponent().lastPathComponent }).subtracting(["All", "assets"])).sorted() }
+    private var library: [URL] { standalone ? model.wallpapers.filter(model.isFavorite) : model.wallpapers }
+    private var categories: [String] { ["All"] + Array(Set(library.map { $0.deletingLastPathComponent().lastPathComponent }).subtracting(["All", "assets"])).sorted() }
     private var filtered: [URL] {
-        let categorized = model.wallpaperCategory == "All" ? model.wallpapers : model.wallpapers.filter { $0.deletingLastPathComponent().lastPathComponent == model.wallpaperCategory }
+        let categorized = model.wallpaperCategory == "All" ? library : library.filter { $0.deletingLastPathComponent().lastPathComponent == model.wallpaperCategory }
         let searched = model.wallpaperSearch.isEmpty ? categorized : categorized.filter { $0.lastPathComponent.localizedCaseInsensitiveContains(model.wallpaperSearch) }
-        return model.wallpaperViewMode == 2 ? searched.filter(model.isFavorite) : searched
+        return !standalone && model.wallpaperViewMode == 2 ? searched.filter(model.isFavorite) : searched
     }
 
     var body: some View {
@@ -166,7 +179,7 @@ struct WallpaperGalleryView: View {
             toolbar
             if model.wallpaperViewMode != 0 { categoryBar }
             Group {
-                if model.wallpaperViewMode == 0 { homeView }
+                if !standalone && model.wallpaperViewMode == 0 { homeView }
                 else if filtered.isEmpty { emptyView }
                 else if model.wallpaperGridMode { gridView }
                 else { carouselView }
@@ -180,6 +193,11 @@ struct WallpaperGalleryView: View {
         .padding(standalone ? 8 : 0)
         .focusable()
         .onMoveCommand { direction in moveSelection(direction) }
+        .onAppear {
+            if !standalone { model.wallpaperViewMode = 1 }
+            model.wallpaperCategory = "All"
+            model.wallpaperSelectionIndex = 0
+        }
     }
 
     private var toolbar: some View {
@@ -188,11 +206,11 @@ struct WallpaperGalleryView: View {
                 Text("RYFT").font(.caption2.weight(.bold)).tracking(2).foregroundStyle(Color(hex: palette.accent))
                 Text("Wallpaper library").font(.title3.weight(.semibold))
             }.frame(width: 170, alignment: .leading)
-            toolbarButton("house.fill", selected: model.wallpaperViewMode == 0) { model.wallpaperViewMode = 0 }
+            if !standalone { toolbarButton("house.fill", selected: model.wallpaperViewMode == 0) { model.wallpaperViewMode = 0 } }
             HStack(spacing: 8) { Image(systemName: "magnifyingglass").foregroundStyle(Color(hex: palette.muted)); TextField("Search the library", text: $model.wallpaperSearch).textFieldStyle(.plain); if !model.wallpaperSearch.isEmpty { Button { model.wallpaperSearch = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(SettingsHoverButtonStyle()).foregroundStyle(Color(hex: palette.muted)) } }
                 .padding(.horizontal, 12).frame(maxWidth: .infinity).frame(height: 40).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             toolbarButton(model.wallpaperGridMode ? "rectangle.split.3x3" : "rectangle.split.3x1", selected: model.wallpaperGridMode) { model.wallpaperGridMode.toggle(); model.wallpaperViewMode = 1 }
-            toolbarButton(model.wallpaperViewMode == 2 ? "heart.fill" : "heart", selected: model.wallpaperViewMode == 2) { model.wallpaperViewMode = model.wallpaperViewMode == 2 ? 1 : 2 }
+            if !standalone { toolbarButton(model.wallpaperViewMode == 2 ? "heart.fill" : "heart", selected: model.wallpaperViewMode == 2) { model.wallpaperViewMode = model.wallpaperViewMode == 2 ? 1 : 2 } }
             Spacer()
             Menu {
                 if !standalone {
@@ -207,7 +225,10 @@ struct WallpaperGalleryView: View {
             } label: { Image(systemName: "plus").frame(width: 28, height: 28) }
             if model.installingWallpaperArchive { ProgressView().controlSize(.small) }
             Button { applySelected() } label: { Label("Apply", systemImage: "checkmark").font(.caption.weight(.semibold)).padding(.horizontal, 12).frame(height: 38).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(RoundedRectangle(cornerRadius: 12)) }.buttonStyle(SettingsHoverButtonStyle()).keyboardShortcut(.return, modifiers: []).help("Apply selected wallpaper")
-            toolbarButton("shuffle", selected: false) { model.randomWallpaper() }
+            toolbarButton("shuffle", selected: false) {
+                if standalone, let wallpaper = filtered.randomElement() { model.setWallpaper(wallpaper) }
+                else { model.randomWallpaper() }
+            }
         }.frame(height: 44).help(model.wallpaperArchiveStatus)
     }
     private var categoryBar: some View {
@@ -243,8 +264,8 @@ struct WallpaperGalleryView: View {
     private var emptyView: some View {
         VStack(spacing: 10) {
             Image(systemName: model.wallpaperViewMode == 2 ? "heart.slash" : "photo.on.rectangle.angled").font(.system(size: 38))
-            Text(model.wallpaperViewMode == 2 ? "No favorite wallpapers" : "No wallpapers found").font(.headline)
-            if standalone { Text("Add wallpaper folders in Ryft Settings.").font(.caption) }
+            Text(standalone || model.wallpaperViewMode == 2 ? "No favorite wallpapers" : "No wallpapers found").font(.headline)
+            if standalone { Text("Favorite wallpapers from Ryft Settings to show them here.").font(.caption) }
             else { HStack { Button("Add wallpaper folder") { model.addWallpaperFolder() }; Button("Install GitHub collection") { model.installWallpaperArchive() }.disabled(model.installingWallpaperArchive) } }
             if !model.wallpaperArchiveStatus.isEmpty { Text(model.wallpaperArchiveStatus).font(.caption) }
         }
@@ -393,13 +414,12 @@ struct GeneralSettingsView: View {
         }
         SettingsGroup("App identity and security") {
             LabeledContent("Local signing identity", value: "Termatica Release Signing")
-            LabeledContent("Bundle identifier", value: "com.sebastianmiletic.ryft")
             Text("Termatica signs local Ryft builds so macOS can retain Accessibility, Input Monitoring, Screen Recording, and Keychain trust across updates. It is never used to authenticate Gemini, request your Mac password, or access biometric data.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
         SettingsGroup("Desktop integration") {
             LabeledContent("Bar engine", value: "Native AppKit + SwiftUI")
-            LabeledContent("Imported preset", value: "Sebastian II")
-            Text("Sebastian II is ported from github.com/sebastianmiletic/hyprland-dotfiles at commit bb7de91. The upstream desktop uses Quickshell, not Waybar, so Ryft maps its layout and palette to native macOS modules.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            LabeledContent("Default preset", value: "Classic")
+            Text("The Classic preset maps the original Quickshell layout and palette to native macOS modules.").font(.caption).foregroundStyle(.secondary)
         }
         Divider().padding(.vertical, 4)
         Button(role: .destructive) { NSApp.terminate(nil) } label: { Label("Quit Ryft", systemImage: "power").frame(maxWidth: .infinity) }

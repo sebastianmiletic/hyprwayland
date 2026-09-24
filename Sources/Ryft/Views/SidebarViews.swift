@@ -19,6 +19,29 @@ private struct SidebarShell<Content: View>: View {
     }
 }
 
+private struct AssistantThinkingRow: View {
+    let color: Color
+    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    var body: some View {
+        HStack(spacing: 8) {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+                let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.2) / 1.2
+                HStack(spacing: 4) {
+                    ForEach(0..<3, id: \.self) { index in
+                        let wave = (sin((phase * .pi * 2) - Double(index) * 0.8) + 1) / 2
+                        Circle().fill(color).frame(width: 5, height: 5)
+                            .scaleEffect(reduceMotion ? 1 : 0.72 + wave * 0.38)
+                            .opacity(reduceMotion ? 0.75 : 0.38 + wave * 0.62)
+                    }
+                }
+            }.frame(width: 26)
+            Text("Thinking").font(.caption).foregroundStyle(color)
+            Spacer()
+        }
+        .padding(.horizontal, 11).padding(.vertical, 9)
+    }
+}
+
 struct LeftSidebarView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var gemini: GeminiService
@@ -37,6 +60,10 @@ struct LeftSidebarView: View {
                     VStack(alignment: .leading, spacing: 1) { Text("Gemini").font(.system(size: 16, weight: .semibold, design: .rounded)); Text(gemini.isLoading ? "Thinking with \(gemini.currentModelName)" : gemini.currentModelName).font(.caption).foregroundStyle(Color(hex: palette.muted)).lineLimit(1) }
                     Spacer()
                     if gemini.hasAPIKey {
+                        Button { model.assistantPanelLocked.toggle() } label: {
+                            Image(systemName: model.assistantPanelLocked ? "lock.fill" : "lock.open").frame(width: 26, height: 26)
+                        }.buttonStyle(.plain).help(model.assistantPanelLocked ? "Unlock panel dismissal" : "Keep panel open")
+                            .accessibilityLabel(model.assistantPanelLocked ? "Unlock Gemini panel" : "Lock Gemini panel open")
                         Button { gemini.newConversation() } label: { Image(systemName: "square.and.pencil").frame(width: 26, height: 26) }.buttonStyle(.plain).help("New conversation")
                         Menu {
                             Button("New conversation") { gemini.newConversation() }
@@ -95,11 +122,26 @@ struct LeftSidebarView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     .contextMenu { Button("Copy") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.text, forType: .string) } }
                                 if message.role != "user" { Spacer(minLength: 42) }
-                            }.id(message.id)
+                            }
+                            .id(message.id)
+                            .transition(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                         }
-                        if gemini.isLoading { HStack { ProgressView().controlSize(.small); Text("Thinking…").font(.caption).foregroundStyle(Color(hex: palette.muted)); Spacer() } }
-                    }.padding(3)
-                }.onChange(of: gemini.messages.count) { _ in if let id = gemini.messages.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
+                        if gemini.isLoading {
+                            AssistantThinkingRow(color: Color(hex: palette.muted)).id("assistant-thinking")
+                                .transition(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .opacity : .scale(scale: 0.96, anchor: .leading).combined(with: .opacity))
+                        }
+                    }
+                    .padding(3)
+                    .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.22), value: gemini.messages.count)
+                    .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.18), value: gemini.isLoading)
+                }
+                .onChange(of: gemini.messages.count) { _ in if let id = gemini.messages.last?.id { withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .bottom) } } }
+                .onChange(of: gemini.isLoading) { loading in
+                    withAnimation(.easeOut(duration: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.18)) {
+                        if loading { proxy.scrollTo("assistant-thinking", anchor: .bottom) }
+                        else if let id = gemini.messages.last?.id { proxy.scrollTo(id, anchor: .bottom) }
+                    }
+                }
             }
             if !gemini.errorMessage.isEmpty { Text(gemini.errorMessage).font(.caption).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading) }
             HStack(spacing: 8) {

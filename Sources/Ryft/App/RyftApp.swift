@@ -47,9 +47,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let manager = GlobalHotkeyManager()
         manager.onShortcut = { [weak self] shortcut in self?.perform(shortcut) }
         manager.onWorkspace = { number in model.workspaces.switchTo(number) { model.statusMessage = $0 } }
-        manager.register(model.configuration.shortcuts)
+        if TermaticaIntegrationService.isInstalled { TermaticaIntegrationService.stopLegacyCommandLauncher() }
+        manager.register(model.configuration.shortcuts, termaticaEnabled: model.configuration.termaticaShortcutEnabled)
         hotkeys = manager
-        cancellable = model.$configuration.map(\.shortcuts).removeDuplicates().dropFirst().sink { [weak manager] in manager?.register($0) }
+        cancellable = model.$configuration
+            .removeDuplicates { lhs, rhs in lhs.shortcuts == rhs.shortcuts && lhs.termaticaShortcutEnabled == rhs.termaticaShortcutEnabled }
+            .dropFirst()
+            .sink { [weak manager] configuration in
+                let enabled = configuration.termaticaShortcutEnabled
+                if TermaticaIntegrationService.isInstalled { TermaticaIntegrationService.stopLegacyCommandLauncher() }
+                manager?.register(configuration.shortcuts, termaticaEnabled: enabled)
+            }
         observers.append(NotificationCenter.default.addObserver(forName: .ryftShowWallpapers, object: nil, queue: .main) { [weak self] _ in self?.showWallpaperGallery() })
         observers.append(NotificationCenter.default.addObserver(forName: .ryftShowSettings, object: nil, queue: .main) { [weak self] _ in self?.showSettings() })
         observers.append(NotificationCenter.default.addObserver(forName: .ryftToggleLeftSidebar, object: nil, queue: .main) { [weak self] _ in self?.sidePanelController?.toggleLeft() })
@@ -200,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .leftSidebar: sidePanelController?.toggleLeft()
         case .rightSidebar: sidePanelController?.toggleRight()
         case .screenAnswer: model.answerQuestionOnScreen()
+        case .termatica: TermaticaIntegrationService.openOrControl()
         case .quitFrontmost:
             guard let app = NSWorkspace.shared.frontmostApplication else { return }
             if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { NSApp.terminate(nil) }

@@ -55,6 +55,7 @@ final class AppModel: ObservableObject {
     @Published var screenAnswerIsChoice = false
     @Published var screenAnswerLoading = false
     @Published var screenAnswerStartedAt = Date()
+    @Published var assistantPanelLocked = false
     @Published var wallpaperArchiveStatus = ""
     @Published var installingWallpaperArchive = false
     let system = SystemMonitor()
@@ -108,7 +109,7 @@ final class AppModel: ObservableObject {
         if FileManager.default.fileExists(atPath: archive), !configuration.wallpaperFolders.contains(archive) { configuration.wallpaperFolders.append(archive) }
         if configuration.currentWallpaper.isEmpty, let screen = NSScreen.main, let current = NSWorkspace.shared.desktopImageURL(for: screen) { configuration.currentWallpaper = current.path }
         if configuration.sourcePresetVersion < 2 {
-            configuration.bar.palette = .sebastian
+            configuration.bar.palette = .classic
             configuration.bar.widgets = WidgetConfiguration.defaults
             configuration.bar.height = 38
             configuration.bar.cornerRadius = 17
@@ -201,6 +202,15 @@ final class AppModel: ObservableObject {
             configuration.shortcuts.removeAll { $0.action == .leftSidebar || $0.action == .rightSidebar }
             configuration.sourcePresetVersion = 15
         }
+        if configuration.sourcePresetVersion < 16 {
+            let isLegacyClassic: (ThemePalette) -> Bool = { $0.background == "#141313" && $0.surface == "#2D2A2F" }
+            if isLegacyClassic(configuration.bar.palette) { configuration.bar.palette = .classic }
+            for index in configuration.savedBars.indices where isLegacyClassic(configuration.savedBars[index].bar.palette) {
+                configuration.savedBars[index].bar.palette = .classic
+                configuration.savedBars[index].name = "Classic"
+            }
+            configuration.sourcePresetVersion = 16
+        }
         // Wallpaper and side-panel entry points are bar/settings-only, including imported profiles.
         configuration.shortcuts.removeAll { $0.action == .wallpaper || $0.action == .randomWallpaper || $0.action == .leftSidebar || $0.action == .rightSidebar }
         if !configuration.bar.widgets.contains(where: { $0.kind == .settings || $0.clickAction == .settings }) {
@@ -244,11 +254,19 @@ final class AppModel: ObservableObject {
         screenAnswerLoading = true
         screenAnswer = ""
         screenAnswerIsChoice = false
-        if let selectedText = SelectedTextService.currentSelection() {
-            statusMessage = "Answering selected text…"
-            gemini.answerSelection(selectedText) { [weak self] result in self?.handleScreenAnswer(result) }
-            return
+        statusMessage = "Checking selected text…"
+        SelectedTextService.currentSelection { [weak self] selectedText in
+            guard let self, self.screenAnswerLoading else { return }
+            if let selectedText {
+                self.statusMessage = "Answering selected text…"
+                self.gemini.answerSelection(selectedText) { [weak self] result in self?.handleScreenAnswer(result) }
+                return
+            }
+            self.answerCapturedScreen()
         }
+    }
+
+    private func answerCapturedScreen() {
         statusMessage = "Reading the current screen…"
         switch ScreenQuestionCaptureService.capture() {
         case .failure(let error):

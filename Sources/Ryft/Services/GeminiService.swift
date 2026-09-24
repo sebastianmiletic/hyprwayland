@@ -237,7 +237,7 @@ final class GeminiService: ObservableObject {
                 }
                 self.modelRetryAfter[model.id] = nil
                 self.reserve(model)
-                self.messages.append(ChatMessage(role: "model", text: self.bulletize(text), model: model.id)); self.isLoading = false; self.errorMessage = ""; self.saveHistory()
+                self.messages.append(ChatMessage(role: "model", text: self.formatAssistantResponse(text), model: model.id)); self.isLoading = false; self.errorMessage = ""; self.saveHistory()
             }
         }
         requestTask?.resume()
@@ -444,7 +444,7 @@ final class GeminiService: ObservableObject {
     private func loadHistory() {
         guard let data = try? Data(contentsOf: historyURL), let saved = try? JSONDecoder().decode([ChatMessage].self, from: data), !saved.isEmpty else { return }
         messages = Array(saved.suffix(80)).map { message in
-            message.role == "model" ? ChatMessage(id: message.id, role: message.role, text: bulletize(message.text), model: message.model) : message
+            message.role == "model" ? ChatMessage(id: message.id, role: message.role, text: formatAssistantResponse(message.text), model: message.model) : message
         }
     }
 
@@ -463,6 +463,26 @@ final class GeminiService: ObservableObject {
             .replacingOccurrences(of: "`", with: "")
             .replacingOccurrences(of: "#", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func formatAssistantResponse(_ text: String) -> String {
+        let clean = plainText(text)
+        let upper = clean.uppercased()
+        if upper.hasPrefix("MODE: PROSE") || upper.hasPrefix("MODE:PROSE") {
+            var prose = clean.replacingOccurrences(of: #"^MODE:\s*PROSE\s*"#, with: "", options: [.regularExpression, .caseInsensitive])
+            prose = prose.components(separatedBy: .newlines)
+                .map { $0.replacingOccurrences(of: #"^(?:[•*\-]|\d+[.)])\s*"#, with: "", options: .regularExpression) }
+                .joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            var sentences: [String] = []
+            prose.enumerateSubstrings(in: prose.startIndex..<prose.endIndex, options: .bySentences) { sentence, _, _, stop in
+                if let sentence { sentences.append(sentence.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                if sentences.count == 3 { stop = true }
+            }
+            return sentences.isEmpty ? prose : sentences.joined(separator: " ")
+        }
+        let bullets = clean.replacingOccurrences(of: #"^MODE:\s*BULLETS\s*"#, with: "", options: [.regularExpression, .caseInsensitive])
+        return bulletize(bullets)
     }
 
     private func bulletize(_ text: String) -> String {
@@ -486,14 +506,14 @@ final class GeminiService: ObservableObject {
         Focused app: \(app)
 
         Non-negotiable response rules:
-        - Return only concise dot points.
-        - Begin every line with the bullet character • followed by one space.
-        - Use one fact or action per line.
+        - First classify the request silently.
+        - For ordinary questions, facts, lists, steps, recommendations, and simple explanations, begin with MODE: BULLETS. Then return only concise dot points, each beginning with • followed by one space.
+        - For advanced test-style questions that require a developed explanation, analysis, comparison, justification, or extended written answer, begin with MODE: PROSE. Then write one short sentence when sufficient, or at most two to three concise sentences when the answer genuinely needs development.
+        - Never mix prose and bullets. Never exceed three prose sentences.
         - Never use Markdown, asterisks, hashes, headings, tables, emphasis markers, code fences, emojis, or decorative symbols.
         - Never repeat the user's question.
-        - Prefer the direct answer first, then only essential supporting points.
+        - Put the direct answer first and include only essential support.
         - Write mathematics with readable Unicode characters instead of LaTeX delimiters.
-        - Keep simple answers to one dot point and longer answers brief.
         """
     }
 
@@ -503,7 +523,7 @@ final class GeminiService: ObservableObject {
 }
 
 private final class GeminiKeychain {
-    private let service = "com.sebastianmiletic.ryft.gemini"
+    private let service = "app.ryft.desktop.gemini"
     // A new account avoids inheriting access-control lists from development
     // builds that could trigger a macOS login-password dialog. Users paste the
     // API key once; stable signed updates can then read it without interaction.

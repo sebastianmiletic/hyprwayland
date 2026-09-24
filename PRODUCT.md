@@ -20,7 +20,7 @@ Not a SaaS dashboard, not a decorative glassmorphism demo, and not a fake Linux 
 1. Show the real result while editing: the live bar is the primary preview.
 2. Native first: use macOS frameworks for windows, wallpapers, screens, persistence, and global shortcuts.
 3. Power without config-file tax: expose detailed controls visually and save them as a portable JSON profile.
-4. Source fidelity, macOS behavior: preserve the exact information architecture, proportions, palette, controls, and interaction model from `sebastianmiletic/hyprland-dotfiles`, replacing only Linux-specific system calls with native macOS equivalents.
+4. Source fidelity, macOS behavior: preserve the reference setup’s information architecture, proportions, palette, controls, and interaction model while replacing Linux-specific system calls with native macOS equivalents.
 5. Every control must work: disable or explain anything that requires macOS permission.
 
 ## Accessibility & Inclusion

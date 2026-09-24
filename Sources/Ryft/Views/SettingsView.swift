@@ -236,16 +236,28 @@ struct HomeSettingsView: View {
     private var palette: ThemePalette { model.configuration.bar.palette }
     private var wallpaperName: String { URL(fileURLWithPath: model.configuration.currentWallpaper).deletingPathExtension().lastPathComponent }
     var body: some View {
-        VStack(spacing: 16) {
-            ZStack(alignment: .bottomLeading) {
-                if let image = NSImage(contentsOfFile: model.configuration.currentWallpaper) { Image(nsImage: image).resizable().scaledToFill() }
-                else { LinearGradient(colors: [Color(hex: palette.surface), Color(hex: palette.background)], startPoint: .topLeading, endPoint: .bottomTrailing) }
-                LinearGradient(colors: [.clear, .black.opacity(0.78)], startPoint: .center, endPoint: .bottom)
-                VStack(alignment: .leading, spacing: 4) { Text(wallpaperName.isEmpty ? "Desktop" : wallpaperName).font(.title2.bold()); Text("Current wallpaper").font(.caption).foregroundStyle(.white.opacity(0.75)) }.foregroundStyle(.white).padding(20)
-            }.frame(height: 285).clipped().clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(hex: palette.muted).opacity(0.28)))
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                spec("Mac", DeviceDetails.model, "laptopcomputer")
-                spec("System", ProcessInfo.processInfo.operatingSystemVersionString.replacingOccurrences(of: "Version ", with: ""), "apple.logo")
+        VStack(alignment: .leading, spacing: 14) {
+            Button { model.selectedSection = .wallpapers } label: {
+                ZStack(alignment: .bottomLeading) {
+                    if let image = NSImage(contentsOfFile: model.configuration.currentWallpaper) { Image(nsImage: image).resizable().scaledToFill() }
+                    else { Color(hex: palette.surface) }
+                    LinearGradient(colors: [.clear, .black.opacity(0.68)], startPoint: .center, endPoint: .bottom)
+                    HStack(alignment: .bottom) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("WALLPAPER").font(.caption2.weight(.bold)).tracking(1.3).foregroundStyle(.white.opacity(0.68))
+                            Text(wallpaperName.isEmpty ? "Desktop" : wallpaperName).font(.title3.weight(.semibold)).lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.up.right").font(.caption.weight(.bold)).padding(8).background(.black.opacity(0.35)).clipShape(Circle())
+                    }.foregroundStyle(.white).padding(16)
+                }
+                .frame(height: 210).clipped().clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }.buttonStyle(SettingsHoverButtonStyle()).help("Open wallpaper library")
+
+            Text("THIS MAC").font(.caption.weight(.semibold)).foregroundStyle(.secondary).tracking(0.8).padding(.top, 2)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                spec("Model", DeviceDetails.model, "laptopcomputer")
+                spec("macOS", ProcessInfo.processInfo.operatingSystemVersionString.replacingOccurrences(of: "Version ", with: ""), "apple.logo")
                 spec("Memory", ByteCountFormatter.string(fromByteCount: Int64(ProcessInfo.processInfo.physicalMemory), countStyle: .memory), "memorychip")
                 spec("Processor", "\(ProcessInfo.processInfo.processorCount) cores", "cpu")
                 spec("Display", DeviceDetails.display, "display")
@@ -254,7 +266,11 @@ struct HomeSettingsView: View {
         }
     }
     private func spec(_ title: String, _ value: String, _ icon: String) -> some View {
-        HStack(spacing: 12) { Image(systemName: icon).font(.title3).foregroundStyle(Color(hex: palette.accent)).frame(width: 28); VStack(alignment: .leading, spacing: 2) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(.system(size: 14, weight: .semibold, design: .rounded)).lineLimit(1) }; Spacer() }.padding(15).background(Color(hex: palette.surface).opacity(0.58)).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(hex: palette.muted).opacity(0.18)))
+        VStack(alignment: .leading, spacing: 9) {
+            HStack { Image(systemName: icon).foregroundStyle(Color(hex: palette.accent)); Spacer(); Text(title.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondary) }
+            Text(value).font(.system(size: 13, weight: .medium, design: .rounded)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12).frame(minHeight: 76).background(Color.primary.opacity(0.035)).clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 }
 
@@ -437,7 +453,7 @@ struct ValueSlider: View {
 
 struct ThemeSettingsView: View {
     @ObservedObject var model: AppModel
-    private let themes: [ThemePalette] = [.sebastian, .trueBlack, .graphite, .paper]
+    private let themes: [ThemePalette] = [.classic, .trueBlack, .graphite, .paper]
     var body: some View {
         SettingsGroup("Presets") {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {

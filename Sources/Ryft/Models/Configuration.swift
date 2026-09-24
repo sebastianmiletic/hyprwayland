@@ -12,7 +12,7 @@ struct ThemePalette: Codable, Equatable, Identifiable {
     var accent: String
     var success: String
 
-    static let sebastian = ThemePalette(id: "sebastian-ii", name: "Sebastian II", source: "github.com/sebastianmiletic/hyprland-dotfiles", background: "#141313", surface: "#2D2A2F", foreground: "#E6E1E1", muted: "#948F94", accent: "#CBC4CB", success: "#B5CCBA")
+    static let classic = ThemePalette(id: "source-classic", name: "Classic", source: "Ryft", background: "#141313", surface: "#2D2A2F", foreground: "#E6E1E1", muted: "#948F94", accent: "#CBC4CB", success: "#B5CCBA")
     static let graphite = ThemePalette(id: "graphite", name: "Graphite", source: "Ryft", background: "#17191C", surface: "#282C31", foreground: "#F0F1F2", muted: "#969CA5", accent: "#F0A35B", success: "#7DBD8B")
     static let paper = ThemePalette(id: "paper", name: "Paper", source: "Ryft", background: "#F1EFEA", surface: "#DDD9D0", foreground: "#242321", muted: "#6D6962", accent: "#B84D3C", success: "#46745A")
     static let trueBlack = ThemePalette(id: "true-black", name: "True Black", source: "Ryft", background: "#000000", surface: "#151515", foreground: "#F2F2F2", muted: "#A0A0A0", accent: "#D0D0D0", success: "#8CCF9B")
@@ -30,16 +30,16 @@ enum BarPosition: String, Codable, CaseIterable, Identifiable {
 }
 enum BarBlurStyle: String, Codable, CaseIterable, Identifiable { case thin = "Thin", regular = "Regular", thick = "Thick"; var id: String { rawValue } }
 enum BuiltInBarStyle: String, CaseIterable, Identifiable {
-    case sebastianExact = "Sebastian II · 1:1"
-    case sebastian = "Sebastian II", islands = "Module islands", minimal = "Minimal line"
+    case sourceExact = "Classic · Exact"
+    case source = "Classic", islands = "Module islands", minimal = "Minimal line"
     case compact = "Compact", catppuccin = "Catppuccin", nord = "Nord"
     case pillOnly = "Pills only", monochrome = "Monochrome", rose = "Rose garden", solarized = "Solarized", outline = "Outline"
     var id: String { rawValue }
     var subtitle: String {
         switch self {
-        case .sebastian: "Faithful source layout"; case .islands: "Every module floats"; case .minimal: "Quiet and transparent"
+        case .source: "Balanced source layout"; case .islands: "Every module floats"; case .minimal: "Quiet and transparent"
         case .compact: "Dense, narrow controls"; case .catppuccin: "Mauve Mocha palette"; case .nord: "Frosted arctic palette"
-        case .sebastianExact: "Exact bb7de91 geometry and palette"
+        case .sourceExact: "Original geometry and palette"
         case .pillOnly: "No bar surface, only modules"; case .monochrome: "Pure neutral utility"; case .rose: "Muted rose and sage"; case .solarized: "Classic precision colors"; case .outline: "Transparent outlined modules"
         }
     }
@@ -167,7 +167,7 @@ struct BarConfiguration: Codable, Equatable {
     var manualNotchWidth: Double = 0
     var workspaceCount = 5
     var showWorkspaceAppIcons = true
-    var palette: ThemePalette = .sebastian
+    var palette: ThemePalette = .classic
     var widgets: [WidgetConfiguration] = WidgetConfiguration.defaults
 
     enum CodingKeys: String, CodingKey { case enabled, height, horizontalInset, outerInset, itemSpacing, cornerRadius, opacity, showBackground, sourceExact, blurEnabled, blurStyle, panelBlurEnabled, panelOpacity, presentation, position, showOnAllDisplays, reserveNotchSpace, splitAroundNotch, notchMaskEnabled, notchMaskHeight, notchShelfCornerRadius, roundBottomDisplayCorners, displayCornerRadius, manualNotchWidth, workspaceCount, showWorkspaceAppIcons, palette, widgets }
@@ -205,7 +205,7 @@ struct BarConfiguration: Codable, Equatable {
         manualNotchWidth = try c.decodeIfPresent(Double.self, forKey: .manualNotchWidth) ?? 0
         workspaceCount = try c.decodeIfPresent(Int.self, forKey: .workspaceCount) ?? 5
         showWorkspaceAppIcons = try c.decodeIfPresent(Bool.self, forKey: .showWorkspaceAppIcons) ?? true
-        palette = try c.decodeIfPresent(ThemePalette.self, forKey: .palette) ?? .sebastian
+        palette = try c.decodeIfPresent(ThemePalette.self, forKey: .palette) ?? .classic
         widgets = try c.decodeIfPresent([WidgetConfiguration].self, forKey: .widgets) ?? WidgetConfiguration.defaults
     }
 }
@@ -217,12 +217,12 @@ extension BarConfiguration {
         presentation = .floating
         for index in widgets.indices { widgets[index].enabled = true }
         switch style {
-        case .sebastian:
+        case .source:
             height = 42; horizontalInset = 12; outerInset = 5; cornerRadius = 18; presentation = .floating; splitAroundNotch = true; blurEnabled = false; opacity = 0.72
             for index in widgets.indices { widgets[index].style = [.uptime, .workspaces, .rightSidebar].contains(widgets[index].kind) ? .pill : .plain }
-        case .sebastianExact:
+        case .sourceExact:
             sourceExact = true; height = 42; horizontalInset = 5; outerInset = 5; itemSpacing = 4; cornerRadius = 18; presentation = .floating; reserveNotchSpace = false; splitAroundNotch = false; showBackground = true; blurEnabled = false; opacity = 1
-            palette = .sebastian; widgets = WidgetConfiguration.defaults
+            palette = .classic; widgets = WidgetConfiguration.defaults
             for index in widgets.indices {
                 widgets[index].fontSize = 13; widgets[index].cornerRadius = 17
                 widgets[index].style = [.uptime, .workspaces, .clock, .rightSidebar].contains(widgets[index].kind) ? .pill : .plain
@@ -274,7 +274,7 @@ extension BarConfiguration {
 }
 
 enum ShortcutAction: String, Codable, CaseIterable, Identifiable {
-    case wallpaper = "Wallpaper gallery", toggleBar = "Toggle bar", settings = "Open settings", randomWallpaper = "Random wallpaper", openFinder = "Open Finder", openApplication = "Open application", runCommand = "Run command", leftSidebar = "Open AI sidebar", rightSidebar = "Open control sidebar", screenAnswer = "Answer visible question", quitFrontmost = "Quit frontmost app"
+    case wallpaper = "Wallpaper gallery", toggleBar = "Toggle bar", settings = "Open settings", randomWallpaper = "Random wallpaper", openFinder = "Open Finder", openApplication = "Open application", runCommand = "Run command", leftSidebar = "Open AI sidebar", rightSidebar = "Open control sidebar", screenAnswer = "Answer visible question", termatica = "Open or control Termatica", quitFrontmost = "Quit frontmost app"
     var id: String { rawValue }
 }
 
@@ -300,14 +300,15 @@ struct RyftConfiguration: Codable, Equatable {
     var adaptColorsToWallpaper = true
     var todos: [String] = []
     var savedBars: [NamedBarProfile] = []
-    var sourcePresetVersion = 15
+    var sourcePresetVersion = 16
     var launchAtLogin = false
     var hasCompletedOnboarding = false
     var tiling = TilingConfiguration()
     var useHyprlandCursor = false
     var experimentalWorkspaceTransitions = true
+    var termaticaShortcutEnabled = true
 
-    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin, hasCompletedOnboarding, tiling, useHyprlandCursor, experimentalWorkspaceTransitions }
+    enum CodingKeys: String, CodingKey { case bar, shortcuts, wallpaperFolders, wallpaperFiles, favoriteWallpapers, currentWallpaper, adaptColorsToWallpaper, todos, savedBars, sourcePresetVersion, launchAtLogin, hasCompletedOnboarding, tiling, useHyprlandCursor, experimentalWorkspaceTransitions, termaticaShortcutEnabled }
     enum LegacyCodingKeys: String, CodingKey { case omniWMTiling }
     init() {}
     init(from decoder: Decoder) throws {
@@ -332,6 +333,7 @@ struct RyftConfiguration: Codable, Equatable {
             ?? TilingConfiguration()
         useHyprlandCursor = try c.decodeIfPresent(Bool.self, forKey: .useHyprlandCursor) ?? false
         experimentalWorkspaceTransitions = try c.decodeIfPresent(Bool.self, forKey: .experimentalWorkspaceTransitions) ?? true
+        termaticaShortcutEnabled = try c.decodeIfPresent(Bool.self, forKey: .termaticaShortcutEnabled) ?? true
     }
 }
 

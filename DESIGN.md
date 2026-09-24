@@ -65,7 +65,7 @@ Ryft should feel like a carefully tuned desktop environment that happens to obey
 The system is technical, tactile, and composed. Density is welcome where it supports scanning, but decoration never competes with status or control. It explicitly rejects SaaS dashboard framing, decorative glassmorphism, terminal cosplay, nested cards, and controls that only simulate an outcome.
 
 **Key Characteristics:**
-- The Sebastian II bar, wallpaper selector, and both sidebars mapped directly from the source QML at commit `bb7de91`.
+- The Classic bar, wallpaper selector, and both sidebars mapped directly from the source QML reference.
 - A dense, rounded bar paired with a quiet native editor.
 - Immediate live feedback for every visual change.
 - A visible protected notch zone with symmetric left and right segments that can stop before the camera area.
@@ -74,7 +74,7 @@ The system is technical, tactile, and composed. Density is welcome where it supp
 
 ## 2. Colors
 
-The default Sebastian II palette uses warm charcoal and mineral neutrals rather than generic blue-black developer tooling.
+The default Classic palette uses warm charcoal and mineral neutrals rather than generic blue-black developer tooling.
 
 ### Primary
 - **Mineral Accent:** Selection, active workspace, and focused controls only.

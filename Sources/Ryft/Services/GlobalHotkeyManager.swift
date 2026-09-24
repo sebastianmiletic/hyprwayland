@@ -51,18 +51,22 @@ final class GlobalHotkeyManager {
         clear(); if let handler { RemoveEventHandler(handler) }
     }
 
-    func register(_ shortcuts: [ShortcutConfiguration]) {
+    func register(_ shortcuts: [ShortcutConfiguration], termaticaEnabled: Bool = false) {
         clear()
         let screenAnswerShortcut = ShortcutConfiguration(action: .screenAnswer, key: "m", option: false, command: true)
-        polledShortcuts = [screenAnswerShortcut] + shortcuts.filter {
+        let termaticaShortcut = ShortcutConfiguration(action: .termatica, key: "return", option: false, command: true)
+        polledShortcuts = [screenAnswerShortcut] + (termaticaEnabled && TermaticaIntegrationService.isInstalled ? [termaticaShortcut] : []) + shortcuts.filter {
             !(Self.keyCodes[$0.key.lowercased()] == 46 && $0.command && !$0.option && !$0.control && !$0.shift)
         }
         var combinations = Set<String>()
         // The secret answer shortcut is registered directly with the macOS
         // dispatcher and does not depend on app focus or editable keybinds.
-        let fixed: [(UInt32, ShortcutConfiguration, Int, UInt32)] = [
+        var fixed: [(UInt32, ShortcutConfiguration, Int, UInt32)] = [
             (2004, screenAnswerShortcut, 46, UInt32(cmdKey))
         ]
+        if termaticaEnabled && TermaticaIntegrationService.isInstalled {
+            fixed.append((2005, termaticaShortcut, kVK_Return, UInt32(cmdKey)))
+        }
         for (idValue, shortcut, code, modifiers) in fixed {
             var ref: EventHotKeyRef?
             let id = EventHotKeyID(signature: Self.signature, id: idValue)
@@ -174,7 +178,7 @@ final class GlobalHotkeyManager {
     private static let signature: OSType = 0x57415943
     static let keyCodes: [String: Int] = [
         "a":0,"s":1,"d":2,"f":3,"h":4,"g":5,"z":6,"x":7,"c":8,"v":9,"b":11,"q":12,"w":13,"e":14,"r":15,"y":16,"t":17,
-        "1":18,"2":19,"3":20,"4":21,"6":22,"5":23,"=":24,"9":25,"7":26,"-":27,"8":28,"0":29,"o":31,"u":32,"i":34,"p":35,"l":37,"j":38,"k":40,"n":45,"m":46
+        "1":18,"2":19,"3":20,"4":21,"6":22,"5":23,"=":24,"9":25,"7":26,"-":27,"8":28,"0":29,"o":31,"u":32,"i":34,"p":35,"l":37,"j":38,"k":40,"n":45,"m":46,"return":36
     ]
 }
 

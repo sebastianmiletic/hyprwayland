@@ -111,7 +111,6 @@ struct QuickStartSettingsView: View {
             }
             SettingsGroup("Useful keys") {
                 LabeledContent("Answer selected text or visible question", value: "Command + M")
-                LabeledContent("Switch desktops", value: "Option + 1–9")
                 LabeledContent("Open Finder", value: "Command + E")
                 LabeledContent("Close a panel", value: "Escape")
             }
