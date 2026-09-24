@@ -79,11 +79,6 @@ struct SettingsView: View {
             }.padding(10).frame(minWidth: 174).background(.ultraThinMaterial)
         } detail: {
             VStack(spacing: 0) {
-                if model.selectedSection == .modules {
-                    EditableBarCanvas(model: model, selectedWidgetID: $model.selectedEditorWidget)
-                        .frame(maxWidth: 980).padding(.horizontal, 28).padding(.top, 20).padding(.bottom, 14)
-                    Divider()
-                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         PageHeader(section: model.selectedSection)
@@ -115,9 +110,7 @@ struct SettingsView: View {
         case .home: HomeSettingsView(model: model)
         case .permissions: PermissionsSettingsView(model: model)
         case .guide: QuickStartSettingsView(model: model)
-        case .bar: BarSettingsView(model: model)
-        case .themes: ThemeSettingsView(model: model)
-        case .modules: ModuleSettingsView(model: model)
+        case .waybar: WaybarSettingsView(model: model)
         case .tiling: TilingSettingsView(model: model)
         case .assistant: AssistantSettingsView(model: model)
         case .shortcuts: ShortcutSettingsView(model: model)
@@ -140,9 +133,7 @@ private struct PageHeader: View {
         case .home: "Your desktop, wallpaper, and Mac at a glance."
         case .permissions: "Control exactly which macOS features Ryft can access."
         case .guide: "The essential controls, shortcuts, and everyday workflow."
-        case .bar: "Shape the live desktop bar. Changes appear immediately."
-        case .themes: "Choose a preset or tune every color."
-        case .modules: "Decide what earns space in the bar."
+        case .waybar: "Configure the bar, themes, geometry, and widgets in one place."
         case .tiling: "Automatically arrange new windows with a Hyprland-style Dwindle layout."
         case .assistant: "Configure Gemini, selected-text answers, model routing, and privacy."
         case .shortcuts: "Map global controls that work from any app."
@@ -339,6 +330,15 @@ private struct BarStylePreview: View {
     }
 }
 
+struct WaybarSettingsView: View {
+    @ObservedObject var model: AppModel
+    var body: some View {
+        BarSettingsView(model: model)
+        ThemeSettingsView(model: model)
+        ModuleSettingsView(model: model)
+    }
+}
+
 struct BarSettingsView: View {
     @ObservedObject var model: AppModel
     private var placementDescription: String {
@@ -351,10 +351,6 @@ struct BarSettingsView: View {
         return "\(model.configuration.bar.position.rawValue) edge. \(edge) Tiled windows automatically use the remaining work area."
     }
     var body: some View {
-        SettingsGroup("Current bar · live at actual height") {
-            CurrentBarInspector(model: model)
-            Text("This is the same renderer and configuration used on the desktop. It is shown at 1:1 point size; scroll horizontally to inspect the complete display-width layout.").font(.caption).foregroundStyle(.secondary)
-        }
         SettingsGroup("Style library") {
             LazyVStack(spacing: 12) {
                 ForEach(BuiltInBarStyle.allCases) { style in BarStylePreview(model: model, style: style) }
@@ -484,7 +480,7 @@ struct ModuleSettingsView: View {
     @ObservedObject var model: AppModel
     var body: some View {
         HStack {
-            Text("Drag widgets on the exact bar above, or use the detailed controls below.").font(.caption).foregroundStyle(.secondary)
+            Text("Arrange widgets with the detailed controls below; changes appear on the desktop bar immediately.").font(.caption).foregroundStyle(.secondary)
             Spacer()
             Menu("Add widget", systemImage: "plus") {
                 ForEach(WidgetKind.allCases.filter { $0 != .spacer }) { kind in Button(kind.rawValue) { add(kind) } }

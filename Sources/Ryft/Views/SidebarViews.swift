@@ -39,7 +39,7 @@ struct LeftSidebarView: View {
                     if gemini.hasAPIKey {
                         Button { gemini.newConversation() } label: { Image(systemName: "square.and.pencil").frame(width: 26, height: 26) }.buttonStyle(.plain).help("New conversation")
                         Menu {
-                            Button("Use selected text") { model.loadSelectionIntoAssistant() }
+                            Button("New conversation") { gemini.newConversation() }
                             Button("Copy last response") { gemini.copyLastResponse() }
                             Button("Assistant settings") { model.selectedSection = .assistant; NotificationCenter.default.post(name: .ryftShowSettings, object: nil); close() }
                             Divider()
@@ -103,20 +103,32 @@ struct LeftSidebarView: View {
             }
             if !gemini.errorMessage.isEmpty { Text(gemini.errorMessage).font(.caption).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading) }
             HStack(spacing: 8) {
-                Button { model.loadSelectionIntoAssistant() } label: { Image(systemName: "text.cursor").frame(width: 24, height: 24) }
-                    .buttonStyle(.plain).help("Use selected text")
-                TextField("Message Gemini", text: $gemini.draft, axis: .vertical).textFieldStyle(.plain).lineLimit(1...5).onSubmit { gemini.send() }
+                Menu {
+                    command("/new", "New conversation")
+                    command("/clear", "Clear conversation")
+                    command("/copy", "Copy last answer")
+                    command("/model", "Show current model")
+                    command("/help", "List commands")
+                } label: { Image(systemName: "slash.circle").frame(width: 24, height: 24) }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 24).help("Assistant commands")
+                TextField("Message Gemini or type /help", text: $gemini.draft, axis: .vertical).textFieldStyle(.plain).lineLimit(1...5).onSubmit { gemini.send() }
                 Button { gemini.isLoading ? gemini.stop() : gemini.send() } label: {
                     Image(systemName: gemini.isLoading ? "stop.fill" : "arrow.up").fontWeight(.bold).frame(width: 30, height: 30).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(Circle())
                 }.buttonStyle(.plain).disabled(!gemini.isLoading && gemini.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }.padding(10).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 15))
-            HStack {
-                Text("Local history · select text, then ⌘M").font(.caption2).foregroundStyle(Color(hex: palette.muted))
+            HStack(spacing: 6) {
+                Circle().fill(Color(hex: palette.success)).frame(width: 5, height: 5)
+                Text(activeUsage?.name ?? gemini.currentModelName).font(.caption2.weight(.semibold)).lineLimit(1)
                 Spacer()
-                if gemini.inputTokens + gemini.outputTokens > 0 { Text("\(gemini.inputTokens) in · \(gemini.outputTokens) out").font(.caption2.monospacedDigit()).foregroundStyle(Color(hex: palette.muted)) }
-                Text("⌥A").font(.caption.monospaced()).foregroundStyle(Color(hex: palette.muted))
-            }
+                if let usage = activeUsage { Text("\(usage.remaining)/\(usage.quota) remaining").font(.caption2.monospacedDigit()) }
+            }.foregroundStyle(Color(hex: palette.muted))
         }
+    }
+    private func command(_ value: String, _ label: String) -> some View {
+        Button("\(value)  \(label)") { gemini.draft = value; gemini.send() }
+    }
+    private var activeUsage: GeminiModelUsage? {
+        gemini.modelUsages.first(where: { $0.id == gemini.currentModelID }) ?? gemini.modelUsages.first
     }
     private var modelUsage: some View {
         DisclosureGroup {

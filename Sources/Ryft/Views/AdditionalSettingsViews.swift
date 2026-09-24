@@ -38,10 +38,7 @@ struct AssistantSettingsView: View {
                 instructionRow("1", "Select text first", "When text is highlighted in the frontmost app, Command+M sends only that text to Gemini. No screenshot is captured.")
                 instructionRow("2", "Otherwise use the visible window", "Without a selection, Ryft captures the focused window in memory and asks Gemini to answer the visible question.")
                 instructionRow("3", "Copy longer answers", "Click the answer in the top-left bar to copy it. Long answers scroll across twice before disappearing.")
-                HStack {
-                    Button { model.answerQuestionOnScreen() } label: { Label("Test Command+M", systemImage: "sparkles") }.buttonStyle(.borderedProminent)
-                    Button { model.loadSelectionIntoAssistant() } label: { Label("Put selection in chat", systemImage: "text.cursor") }.buttonStyle(.bordered)
-                }
+                Button { model.answerQuestionOnScreen() } label: { Label("Test Command+M", systemImage: "sparkles") }.buttonStyle(.borderedProminent)
                 Text("Single choices remain visible for 3 seconds. Written answers remain until their complete marquee has passed twice. Screen capture occurs only after Command+M and is never saved.").font(.caption).foregroundStyle(.secondary)
             }
 
@@ -58,9 +55,9 @@ struct AssistantSettingsView: View {
             }
 
             SettingsGroup("Assistant sidebar") {
-                Label("Option+A opens Gemini from every application.", systemImage: "keyboard")
-                Label("Chats are stored locally and can be selected or copied.", systemImage: "doc.on.doc")
-                Label("New chat, stop, copy, selection import, key controls, token counts, and model usage are available in the panel.", systemImage: "sidebar.left")
+                Label("Open Gemini from the sparkle widget in the desktop bar.", systemImage: "sparkle")
+                Label("Chats are stored locally and responses can be selected or copied.", systemImage: "doc.on.doc")
+                Label("Slash commands, new chat, stop, copy, key controls, token counts, and model usage are available in the panel.", systemImage: "sidebar.left")
                 HStack {
                     Button("Open Gemini") { NotificationCenter.default.post(name: .ryftToggleLeftSidebar, object: nil) }.buttonStyle(.borderedProminent)
                     Button("New conversation") { gemini.newConversation() }.buttonStyle(.bordered)
@@ -84,19 +81,15 @@ struct ShortcutSettingsView: View {
     private let keys = GlobalHotkeyManager.keyCodes.keys.sorted()
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-        SettingsGroup("Built-in shortcuts") {
-            fixedShortcut("⌥A", "Gemini sidebar", "Opens or closes the complete assistant panel.")
-            Divider()
-            fixedShortcut("⌥N", "Controls sidebar", "Opens Wi-Fi, sound, battery, resources, notifications, and tasks.")
-            Divider()
-            fixedShortcut("⌘M", "Answer selection or screen", "Uses highlighted text when available; otherwise reads the focused window. Click a written answer to copy it.")
-            Text("These three source shortcuts remain available globally and are protected from accidental deletion. Additional mappings can be added below.").font(.caption).foregroundStyle(.secondary)
+        SettingsGroup("Built-in shortcut") {
+            fixedShortcut("⌘M", "Secret AI answer", "Uses highlighted question text when available; otherwise reads the focused window. Click a written answer to copy it.")
+            Text("Command+M is protected from accidental deletion. Gemini and Controls sidebars open from their desktop-bar widgets.").font(.caption).foregroundStyle(.secondary)
         }
         SettingsGroup("Editable shortcuts") {
             ForEach(Array(model.configuration.shortcuts.indices), id: \.self) { index in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
-                        Picker("Action", selection: $model.configuration.shortcuts[index].action) { ForEach(ShortcutAction.allCases.filter { $0 != .wallpaper && $0 != .randomWallpaper && $0 != .screenAnswer }) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 170)
+                        Picker("Action", selection: $model.configuration.shortcuts[index].action) { ForEach(ShortcutAction.allCases.filter { $0 != .wallpaper && $0 != .randomWallpaper && $0 != .screenAnswer && $0 != .leftSidebar && $0 != .rightSidebar }) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 170)
                         modifier("⌃", value: $model.configuration.shortcuts[index].control)
                         modifier("⌥", value: $model.configuration.shortcuts[index].option)
                         modifier("⇧", value: $model.configuration.shortcuts[index].shift)
@@ -344,7 +337,7 @@ struct GeneralSettingsView: View {
             Divider()
             permissionRow(
                 "Input Monitoring",
-                detail: "Global Option+A, Option+N, Command+M, and desktop shortcuts.",
+                detail: "Command+M and editable global shortcuts.",
                 symbol: "keyboard",
                 granted: permissions.inputMonitoringGranted
             ) { openPrivacyPane("Privacy_ListenEvent") }

@@ -292,7 +292,7 @@ struct ShortcutConfiguration: Codable, Equatable, Identifiable {
 
 struct RyftConfiguration: Codable, Equatable {
     var bar = BarConfiguration()
-    var shortcuts = [ShortcutConfiguration(action: .leftSidebar, key: "a"), ShortcutConfiguration(action: .rightSidebar, key: "n"), ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
+    var shortcuts = [ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
     var wallpaperFolders = [NSHomeDirectory() + "/Pictures"]
     var wallpaperFiles: [String] = []
     var favoriteWallpapers: [String] = []
@@ -300,7 +300,7 @@ struct RyftConfiguration: Codable, Equatable {
     var adaptColorsToWallpaper = true
     var todos: [String] = []
     var savedBars: [NamedBarProfile] = []
-    var sourcePresetVersion = 14
+    var sourcePresetVersion = 15
     var launchAtLogin = false
     var hasCompletedOnboarding = false
     var tiling = TilingConfiguration()
@@ -313,7 +313,7 @@ struct RyftConfiguration: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         bar = try c.decodeIfPresent(BarConfiguration.self, forKey: .bar) ?? BarConfiguration()
-        shortcuts = try c.decodeIfPresent([ShortcutConfiguration].self, forKey: .shortcuts) ?? [ShortcutConfiguration(action: .leftSidebar, key: "a"), ShortcutConfiguration(action: .rightSidebar, key: "n"), ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
+        shortcuts = try c.decodeIfPresent([ShortcutConfiguration].self, forKey: .shortcuts) ?? [ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
         wallpaperFolders = try c.decodeIfPresent([String].self, forKey: .wallpaperFolders) ?? [NSHomeDirectory() + "/Pictures"]
         wallpaperFiles = try c.decodeIfPresent([String].self, forKey: .wallpaperFiles) ?? []
         favoriteWallpapers = try c.decodeIfPresent([String].self, forKey: .favoriteWallpapers) ?? []

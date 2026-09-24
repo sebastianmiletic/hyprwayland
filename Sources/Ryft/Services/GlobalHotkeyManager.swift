@@ -58,12 +58,9 @@ final class GlobalHotkeyManager {
             !(Self.keyCodes[$0.key.lowercased()] == 46 && $0.command && !$0.option && !$0.control && !$0.shift)
         }
         var combinations = Set<String>()
-        // Core entry points are registered directly with the macOS event
-        // dispatcher. They do not depend on the settings window, app focus, or
-        // the editable keybind list.
+        // The secret answer shortcut is registered directly with the macOS
+        // dispatcher and does not depend on app focus or editable keybinds.
         let fixed: [(UInt32, ShortcutConfiguration, Int, UInt32)] = [
-            (2002, ShortcutConfiguration(action: .leftSidebar, key: "a"), 0, UInt32(optionKey)),
-            (2003, ShortcutConfiguration(action: .rightSidebar, key: "n"), 45, UInt32(optionKey)),
             (2004, screenAnswerShortcut, 46, UInt32(cmdKey))
         ]
         for (idValue, shortcut, code, modifiers) in fixed {
@@ -129,8 +126,6 @@ final class GlobalHotkeyManager {
 
     private func handleGlobalKey(code: Int, option: Bool, command: Bool, control: Bool, shift: Bool) {
         if option && !command && !control && !shift {
-            if code == 0 { invoke(systemShortcuts[2002] ?? ShortcutConfiguration(action: .leftSidebar, key: "a")); return }
-            if code == 45 { invoke(systemShortcuts[2003] ?? ShortcutConfiguration(action: .rightSidebar, key: "n")); return }
             if let index = [18, 19, 20, 21, 23, 22, 26, 28, 25].firstIndex(of: code) { invokeWorkspace(index + 1); return }
         }
         if let shortcut = polledShortcuts.first(where: { Self.keyCodes[$0.key.lowercased()] == code && $0.option == option && $0.command == command && $0.control == control && $0.shift == shift }) { invoke(shortcut) }

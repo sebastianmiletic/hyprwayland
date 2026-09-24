@@ -158,6 +158,11 @@ final class GeminiService: ObservableObject {
     func send() {
         let prompt = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty, !isLoading else { return }
+        if prompt.hasPrefix("/") {
+            draft = ""
+            runCommand(prompt.lowercased())
+            return
+        }
         guard let apiKey = credential() else { hasAPIKey = false; errorMessage = "Gemini credentials are unavailable."; return }
         hasAPIKey = true; messages.append(ChatMessage(role: "user", text: prompt)); saveHistory(); draft = ""; isLoading = true; errorMessage = ""
         chatDeadline = Date().addingTimeInterval(30)
@@ -165,6 +170,23 @@ final class GeminiService: ObservableObject {
         let first = models.firstIndex(where: { modelIsReady($0, forScreen: false) }) ?? 0
         if !modelIsReady(models[first], forScreen: false) { modelRetryAfter[models[first].id] = nil }
         request(apiKey: apiKey, modelIndex: first)
+    }
+
+    private func runCommand(_ command: String) {
+        switch command {
+        case "/new", "/clear":
+            newConversation()
+        case "/copy":
+            copyLastResponse(); errorMessage = ""
+        case "/stop":
+            stop()
+        case "/model":
+            messages.append(ChatMessage(role: "model", text: "• Current model: \(currentModelName)")); saveHistory()
+        case "/help", "/commands":
+            messages.append(ChatMessage(role: "model", text: "• /new starts a new chat.\n• /clear clears this conversation.\n• /copy copies the last answer.\n• /model shows the active model.\n• /stop cancels the current request.")); saveHistory()
+        default:
+            errorMessage = "Unknown command. Type /help for commands."
+        }
     }
 
     private func request(apiKey: String, modelIndex: Int) {

@@ -197,15 +197,12 @@ final class AppModel: ObservableObject {
             configuration.bar.showWorkspaceAppIcons = true
             configuration.sourcePresetVersion = 14
         }
-        // Wallpaper changes are bar/settings-only, including imported profiles.
-        configuration.shortcuts.removeAll { $0.action == .wallpaper || $0.action == .randomWallpaper }
-        // Sidebar entry points remain guaranteed global defaults.
-        let globalDefaults: [(ShortcutAction, String)] = [(.leftSidebar, "a"), (.rightSidebar, "n")]
-        for (action, key) in globalDefaults {
-            if let index = configuration.shortcuts.firstIndex(where: { $0.action == action }) {
-                configuration.shortcuts[index].key = key; configuration.shortcuts[index].option = true; configuration.shortcuts[index].command = false; configuration.shortcuts[index].control = false; configuration.shortcuts[index].shift = false
-            } else { configuration.shortcuts.append(ShortcutConfiguration(action: action, key: key)) }
+        if configuration.sourcePresetVersion < 15 {
+            configuration.shortcuts.removeAll { $0.action == .leftSidebar || $0.action == .rightSidebar }
+            configuration.sourcePresetVersion = 15
         }
+        // Wallpaper and side-panel entry points are bar/settings-only, including imported profiles.
+        configuration.shortcuts.removeAll { $0.action == .wallpaper || $0.action == .randomWallpaper || $0.action == .leftSidebar || $0.action == .rightSidebar }
         if !configuration.bar.widgets.contains(where: { $0.kind == .settings || $0.clickAction == .settings }) {
             configuration.bar.widgets.append(WidgetConfiguration(kind: .settings, name: "Ryft settings", placement: .trailing, icon: "gearshape.fill", showLabel: false, clickAction: .settings))
         }
@@ -287,15 +284,6 @@ final class AppModel: ObservableObject {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(screenAnswer, forType: .string)
         statusMessage = "Answer copied"
-    }
-
-    func loadSelectionIntoAssistant() {
-        guard let selection = SelectedTextService.currentSelection() else {
-            statusMessage = "Select text in another application first"
-            return
-        }
-        gemini.draft = selection
-        statusMessage = "Selected text added to Gemini"
     }
 
     private func scheduleScreenAnswerReset(after delay: TimeInterval) {
@@ -536,12 +524,12 @@ final class AppModel: ObservableObject {
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case home = "Overview", permissions = "Permissions", guide = "Quick Start", bar = "Bar", themes = "Themes", modules = "Widgets", tiling = "Tiling", assistant = "Assistant", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
+    case home = "Overview", permissions = "Permissions", guide = "Quick Start", waybar = "Waybar", tiling = "Tiling", assistant = "Assistant", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .home: "house.fill"; case .permissions: "hand.raised.fill"; case .guide: "lightbulb.fill"
-        case .bar: "menubar.rectangle"; case .themes: "paintpalette"; case .modules: "square.grid.2x2"
+        case .waybar: "menubar.rectangle"
         case .tiling: "rectangle.split.2x2"; case .assistant: "sparkles"; case .shortcuts: "command"; case .wallpapers: "photo.on.rectangle.angled"; case .general: "gearshape"
         }
     }

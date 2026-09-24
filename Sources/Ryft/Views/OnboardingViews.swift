@@ -21,7 +21,7 @@ struct PermissionsSettingsView: View {
                     WorkspaceController.requestAccessibility()
                 }
                 Divider()
-                permissionRow("Input Monitoring", detail: "Makes Option+A, Option+N, Command+M, and desktop shortcuts work in every app.", symbol: "keyboard", status: CGPreflightListenEventAccess() ? "Allowed" : "Not allowed", granted: CGPreflightListenEventAccess()) {
+                permissionRow("Input Monitoring", detail: "Supports Command+M and any editable global shortcuts that require keyboard monitoring.", symbol: "keyboard", status: CGPreflightListenEventAccess() ? "Allowed" : "Not allowed", granted: CGPreflightListenEventAccess()) {
                     _ = CGRequestListenEventAccess()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { model.statusMessage = "Permission status refreshed" }
                 }
@@ -93,11 +93,11 @@ struct QuickStartSettingsView: View {
                 Text("Four controls cover the everyday Ryft workflow. You can replay this guide from Settings at any time.").foregroundStyle(.secondary)
             }
             SettingsGroup("Essentials") {
-                guideRow("Open Gemini", detail: "Press Option+A from any app. Press it again, Escape, or the close button when finished.", symbol: "sparkle", shortcut: "⌥A") {
+                guideRow("Open Gemini", detail: "Click the sparkle in the desktop bar. Escape or the close button dismisses the panel.", symbol: "sparkle", shortcut: "") {
                     NotificationCenter.default.post(name: .ryftToggleLeftSidebar, object: nil)
                 }
                 Divider()
-                guideRow("Open Controls", detail: "Press Option+N for Wi-Fi, sound, battery, resources, alerts, and tasks.", symbol: "slider.horizontal.3", shortcut: "⌥N") {
+                guideRow("Open Controls", detail: "Click Controls in the desktop bar for Wi-Fi, sound, battery, resources, alerts, and tasks.", symbol: "slider.horizontal.3", shortcut: "") {
                     NotificationCenter.default.post(name: .ryftToggleRightSidebar, object: nil)
                 }
                 Divider()
@@ -106,7 +106,7 @@ struct QuickStartSettingsView: View {
                 }
                 Divider()
                 guideRow("Shape the bar", detail: "Choose a style, arrange widgets, and see every change on the real desktop immediately.", symbol: "menubar.rectangle", shortcut: "") {
-                    model.selectedSection = .bar
+                    model.selectedSection = .waybar
                 }
             }
             SettingsGroup("Useful keys") {
