@@ -33,6 +33,10 @@ final class DwindleTilingService: ObservableObject {
     }
 
     private enum SplitAxis { case horizontal, vertical }
+    private struct LayoutKey: Hashable {
+        let display: CGDirectDisplayID
+        let desktop: Int
+    }
     private struct LayoutSplit {
         let index: Int
         let axis: SplitAxis
@@ -54,7 +58,8 @@ final class DwindleTilingService: ObservableObject {
     private var pendingLayoutObservations = 0
     private var forceNextLayout = true
     private var expectedFrames: [CGWindowID: CGRect] = [:]
-    private var splitRatios: [CGDirectDisplayID: [CGFloat]] = [:]
+    private var splitRatios: [LayoutKey: [CGFloat]] = [:]
+    private var activeDesktop = 1
     private var pointerWasDown = false
     private var pointerInteractionActive = false
     private var pointerBaseline: [CGWindowID: CGRect] = [:]
@@ -94,6 +99,18 @@ final class DwindleTilingService: ObservableObject {
     func refresh() {
         guard enabled else { return }
         tileVisibleApplications()
+    }
+
+    func updateActiveDesktop(_ desktop: Int) {
+        let desktop = max(1, desktop)
+        guard activeDesktop != desktop else { return }
+        activeDesktop = desktop
+        forceNextLayout = true
+        expectedFrames.removeAll()
+        pointerWasDown = false
+        pointerInteractionActive = false
+        pointerBaseline.removeAll()
+        if enabled { tileVisibleApplications() }
     }
 
     func shutdown() {
@@ -182,7 +199,7 @@ final class DwindleTilingService: ObservableObject {
 
             tiledApplicationCount += ordered.count
             let frame = availableFrame(for: screen)
-            let ratios = ratios(for: display, count: ordered.count)
+            let ratios = ratios(for: LayoutKey(display: display, desktop: activeDesktop), count: ordered.count)
             let frames = dwindleLayout(count: ordered.count, in: frame, ratios: ratios).frames
             for (window, target) in zip(ordered, frames) {
                 if originalWindows[window.id] == nil { originalWindows[window.id] = OriginalWindow(frame: window.frame, element: window.element) }
@@ -199,7 +216,6 @@ final class DwindleTilingService: ObservableObject {
         originalWindows = originalWindows.filter { existingIDs.contains($0.key) }
         windowOrder = windowOrder.filter { existingIDs.contains($0.key) }
         expectedFrames = nextExpectedFrames
-        splitRatios = splitRatios.filter { grouped[$0.key] != nil }
 
         managedApplicationCount = tiledApplicationCount
         switch tiledApplicationCount {
@@ -455,12 +471,12 @@ final class DwindleTilingService: ObservableObject {
         return frame.insetBy(dx: gap, dy: gap)
     }
 
-    private func ratios(for display: CGDirectDisplayID, count: Int) -> [CGFloat] {
+    private func ratios(for key: LayoutKey, count: Int) -> [CGFloat] {
         let needed = max(0, count - 1)
-        var values = splitRatios[display] ?? []
+        var values = splitRatios[key] ?? []
         if values.count > needed { values.removeLast(values.count - needed) }
         if values.count < needed { values.append(contentsOf: repeatElement(0.5, count: needed - values.count)) }
-        splitRatios[display] = values
+        splitRatios[key] = values
         return values
     }
 
@@ -472,7 +488,8 @@ final class DwindleTilingService: ObservableObject {
             let ordered = displayWindows.sorted { order(for: $0.id) < order(for: $1.id) }
             guard ordered.count > 1, let screen = ordered.first?.screen else { continue }
             let available = availableFrame(for: screen)
-            var ratios = ratios(for: display, count: ordered.count)
+            let key = LayoutKey(display: display, desktop: activeDesktop)
+            var ratios = ratios(for: key, count: ordered.count)
             let layout = dwindleLayout(count: ordered.count, in: available, ratios: ratios)
             guard let changedIndex = ordered.indices.max(by: {
                 frameDifference(ordered[$0].frame, layout.frames[$0]) < frameDifference(ordered[$1].frame, layout.frames[$1])
@@ -529,7 +546,7 @@ final class DwindleTilingService: ObservableObject {
             }
             guard usable > 1 else { continue }
             ratios[best.split.index] = min(0.82, max(0.18, consumed / usable))
-            splitRatios[display] = ratios
+            splitRatios[key] = ratios
             status = "Adjusted tile split"
         }
     }
