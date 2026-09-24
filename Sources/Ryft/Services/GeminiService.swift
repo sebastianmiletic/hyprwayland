@@ -144,7 +144,7 @@ final class GeminiService: ObservableObject {
             modelRetryAfter[models[first].id] = nil
             screenRetryAfter[models[first].id] = nil
         }
-        requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: first, deadline: Date().addingTimeInterval(18), completion: completion)
+        requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: first, deadline: Date().addingTimeInterval(30), completion: completion)
     }
 
     func send() {
@@ -216,14 +216,13 @@ final class GeminiService: ObservableObject {
 
     private func requestScreen(imageData: Data, apiKey: String, modelIndex: Int, deadline: Date, completion: @escaping (Result<GeminiScreenAnswer, Error>) -> Void) {
         guard modelIndex < models.count, deadline.timeIntervalSinceNow > 0.5 else {
-            completion(.failure(NSError(domain: "Ryft.Gemini", code: 3, userInfo: [NSLocalizedDescriptionKey: "Gemini is temporarily unavailable. Try Command+M again."])))
+            completion(.failure(NSError(domain: "Ryft.Gemini", code: 3, userInfo: [NSLocalizedDescriptionKey: "No model returned an answer."])))
             return
         }
+        // The first attempt honors health cooldowns. Once a request is active,
+        // continue through every lower-ranked model instead of stopping merely
+        // because it was cooling down from an earlier request.
         let model = models[modelIndex]
-        if !modelIsReady(model, forScreen: true) {
-            requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, deadline: deadline, completion: completion)
-            return
-        }
         currentModelID = model.id
         guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model.id):generateContent") else {
             completion(.failure(NSError(domain: "Ryft.Gemini", code: 4, userInfo: [NSLocalizedDescriptionKey: "Could not create the Gemini request."])))
@@ -277,7 +276,7 @@ final class GeminiService: ObservableObject {
                     if modelIndex + 1 < self.models.count, deadline.timeIntervalSinceNow > 0.5 {
                         self.requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, deadline: deadline, completion: completion)
                     } else {
-                        completion(.failure(NSError(domain: "Ryft.Gemini", code: status, userInfo: [NSLocalizedDescriptionKey: self.apiError(json) ?? "Gemini could not read the visible question."])))
+                        completion(.failure(NSError(domain: "Ryft.Gemini", code: status, userInfo: [NSLocalizedDescriptionKey: "No model returned an answer."])))
                     }
                     return
                 }
