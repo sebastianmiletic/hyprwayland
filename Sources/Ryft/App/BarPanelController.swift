@@ -84,7 +84,7 @@ final class BarPanelController {
             wallpaperPath: wallpaperPath(for: screen)
         )
         let panel = InteractiveBarPanel(contentRect: panelFrame(on: screen, config: config), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.alphaValue = 1
@@ -120,7 +120,9 @@ final class BarPanelController {
 
     private func makeMenuBarCoverPanel(context: PanelContext) -> NSPanel {
         let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 1)
+        // Native status items can share mainMenu + 1. Keep the wallpaper crop
+        // above every Apple menu-bar surface, while Ryft remains one level higher.
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
         panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = false; panel.hidesOnDeactivate = false; panel.ignoresMouseEvents = true
         // Belong to the current Space rather than remaining stationary across
         // every Space. During a swipe, each cover therefore travels with the
@@ -157,9 +159,13 @@ final class BarPanelController {
         // Never remove the cover between Spaces. Keeping it opaque prevents a
         // one-frame flash of Apple's menu bar while wallpaper metadata catches up.
         entries.forEach { if !$0.menuBarCoverPanel.isVisible { $0.menuBarCoverPanel.orderFrontRegardless() } }
-        for (attempt, delay) in [0.06, 0.16, 0.32, 0.52].enumerated() {
+        // Poll on the first transition frames instead of waiting for coarse
+        // retries. NSWorkspace usually exposes the destination wallpaper within
+        // one or two frames; later attempts cover slower Mission Control paths.
+        let delays = [0.0, 0.016, 0.033, 0.066, 0.12, 0.20, 0.32, 0.50]
+        for (attempt, delay) in delays.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.restoreCoversAfterSpaceChange(generation: generation, force: attempt == 3)
+                self?.restoreCoversAfterSpaceChange(generation: generation, force: attempt == delays.count - 1)
             }
         }
     }
@@ -179,13 +185,12 @@ final class BarPanelController {
         if coversWaitingForWallpaper.isEmpty || force {
             if force { coversWaitingForWallpaper.removeAll() }
             coverWallpaperBeforeSpaceChange.removeAll()
-            synchronize(config)
         }
     }
 
     private func makeCornerPanel(isLeft: Bool) -> NSPanel {
         let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
         panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = false; panel.hidesOnDeactivate = false; panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.contentView = NSHostingView(rootView: DisplayCornerMask(isLeft: isLeft))
