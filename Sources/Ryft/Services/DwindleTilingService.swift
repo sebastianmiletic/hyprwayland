@@ -3,9 +3,9 @@ import ApplicationServices
 import Combine
 import QuartzCore
 
-/// Ryft-owned automatic Dwindle tiling. The engine manages the primary
-/// resizable window from every visible application on the active desktop. One
-/// application fills the safe work area; each additional application splits it.
+/// Ryft-owned automatic Dwindle tiling. The engine manages every resizable
+/// standard window visible on the active desktop, including multiple windows
+/// from one application. Each additional window recursively splits the layout.
 final class DwindleTilingService: ObservableObject {
     @Published private(set) var running = false
     @Published private(set) var status = "Automatic tiling is off"
@@ -204,8 +204,8 @@ final class DwindleTilingService: ObservableObject {
         managedApplicationCount = tiledApplicationCount
         switch tiledApplicationCount {
         case 0: status = "Waiting for an application"
-        case 1: status = "Filling the display with 1 application"
-        default: status = "Tiling \(tiledApplicationCount) applications"
+        case 1: status = "Filling the display with 1 window"
+        default: status = "Tiling \(tiledApplicationCount) windows"
         }
     }
 
@@ -228,7 +228,6 @@ final class DwindleTilingService: ObservableObject {
         }.map(\.element)
         let ownPID = ProcessInfo.processInfo.processIdentifier
         var result: [ManagedWindow] = []
-        var seenPIDs = Set<pid_t>()
         var accessibleByPID: [pid_t: [(element: AXUIElement, frame: CGRect)]] = [:]
         var usedAccessibleIndices: [pid_t: Set<Int>] = [:]
 
@@ -239,7 +238,7 @@ final class DwindleTilingService: ObservableObject {
                   let cgFrame = CGRect(dictionaryRepresentation: boundsDictionary),
                   let windowNumber = info[kCGWindowNumber] as? NSNumber else { continue }
             let pid = pidNumber.int32Value
-            guard pid != ownPID, layer.intValue == 0, !seenPIDs.contains(pid), cgFrame.width >= 180, cgFrame.height >= 100 else { continue }
+            guard pid != ownPID, layer.intValue == 0, cgFrame.width >= 180, cgFrame.height >= 100 else { continue }
             if let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, configuration.excludedBundleIdentifiers.contains(bundleID) { continue }
             let candidates: [(element: AXUIElement, frame: CGRect)]
             if let cached = accessibleByPID[pid] { candidates = cached }
@@ -253,7 +252,6 @@ final class DwindleTilingService: ObservableObject {
                 frameDistance(candidates[$0].frame, cgFrame) < frameDistance(candidates[$1].frame, cgFrame)
             }), let screen = screen(containing: cgFrame) else { continue }
             usedAccessibleIndices[pid, default: []].insert(matchIndex)
-            seenPIDs.insert(pid)
             let match = candidates[matchIndex]
             result.append(ManagedWindow(id: CGWindowID(windowNumber.uint32Value), pid: pid, element: match.element, frame: match.frame, screen: screen))
         }

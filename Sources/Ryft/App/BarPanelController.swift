@@ -125,10 +125,11 @@ final class BarPanelController {
     }
 
     private func updateMenuBarCover(_ panel: NSPanel, on screen: NSScreen, config: BarConfiguration) {
-        guard config.position != .top else { panel.orderOut(nil); return }
-        let height = DisplayLayoutMetrics.menuBarHeight(for: screen)
-        panel.setFrame(NSRect(x: screen.frame.minX, y: screen.frame.maxY - height, width: screen.frame.width, height: height), display: true)
-        panel.orderFrontRegardless()
+        // Never paint a second wallpaper image over the desktop. The synthetic
+        // crop produced a visible seam and showed the previous Space during
+        // swipe transitions. With the native menu bar hidden, the real per-Space
+        // wallpaper already fills this exact region without an overlay.
+        panel.orderOut(nil)
     }
 
     private func makeCornerPanel(isLeft: Bool) -> NSPanel {
@@ -211,10 +212,8 @@ final class BarPanelController {
         @ObservedObject var model: AppModel
         @ObservedObject var context: PanelContext
         var body: some View {
-            ZStack {
-                WallpaperMenuBarCover(path: context.wallpaperPath, screenSize: context.screenSize)
-                BarView(model: model, notchWidth: context.notchWidth, topReservedHeight: context.topReservedHeight, interactionID: context.interactionID)
-            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            BarView(model: model, notchWidth: context.notchWidth, topReservedHeight: context.topReservedHeight, interactionID: context.interactionID)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

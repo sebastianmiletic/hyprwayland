@@ -205,14 +205,14 @@ struct TilingSettingsView: View {
                 Text("Excluded apps keep their own position and size and do not occupy a Dwindle slot.").font(.caption).foregroundStyle(.secondary)
             }
             SettingsGroup("When Ryft rearranges windows") {
-                Label("One visible application fills the complete safe work area.", systemImage: "rectangle")
-                Label("A second application smoothly moves and resizes both windows into equal halves.", systemImage: "rectangle.split.2x1")
-                Label("A third application splits the right pane; later applications keep splitting the remaining pane.", systemImage: "rectangle.split.2x2")
+                Label("One visible window fills the complete safe work area.", systemImage: "rectangle")
+                Label("A second window creates equal halves, even when both belong to the same application.", systemImage: "rectangle.split.2x1")
+                Label("A third window splits the right pane; later windows recursively split the remainder.", systemImage: "rectangle.split.2x2")
                 Label("Drag a tiled window edge to resize its pane and the neighboring pane together.", systemImage: "arrow.left.and.right")
                 Label("Drag a tiled window by its title bar into another pane to swap both applications.", systemImage: "arrow.triangle.swap")
                 Label("The bar, Dock, display edges, fullscreen, minimized, and fixed-size windows stay clear.", systemImage: "arrow.down.right.and.arrow.up.left")
                 Label("Closing back to one application restores its original frame.", systemImage: "arrow.uturn.backward")
-                Text("Ryft manages the primary resizable window from every visible application on each display of the active Mission Control desktop. Changing the bar edge or size immediately reflows all managed applications so none overlap the bar, menu-bar cover, Dock, or display boundary. Turn tiling off to restore original frames and stop automatic placement.")
+                Text("Ryft manages every resizable standard window visible on each display of the active Mission Control desktop, including multiple windows from one application. Changing the bar edge or size immediately reflows all tiles so none overlap the bar, Dock, or display boundary. Turn tiling off to restore original frames and stop automatic placement.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
