@@ -71,6 +71,7 @@ final class GeminiService: ObservableObject {
     private let historyURL: URL
     private var requestTask: URLSessionDataTask?
     private var screenRequestTask: URLSessionDataTask?
+    private var chatDeadline = Date.distantPast
 
     init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Ryft", isDirectory: true)
@@ -142,7 +143,7 @@ final class GeminiService: ObservableObject {
             completion(.failure(NSError(domain: "Ryft.Gemini", code: 2, userInfo: [NSLocalizedDescriptionKey: "No Gemini model quota is currently available."])))
             return
         }
-        requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: first, completion: completion)
+        requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: first, deadline: Date().addingTimeInterval(12), completion: completion)
     }
 
     func send() {
@@ -150,6 +151,7 @@ final class GeminiService: ObservableObject {
         guard !prompt.isEmpty, !isLoading else { return }
         guard let apiKey = credential() else { hasAPIKey = false; errorMessage = "Gemini credentials are unavailable."; return }
         hasAPIKey = true; messages.append(ChatMessage(role: "user", text: prompt)); saveHistory(); draft = ""; isLoading = true; errorMessage = ""
+        chatDeadline = Date().addingTimeInterval(15)
         resetUsageIfNeeded()
         guard let first = models.firstIndex(where: { usageCounts[$0.id, default: 0] < $0.quota && !unavailableModels.contains($0.id) }) else {
             isLoading = false; errorMessage = "No AI model quota is currently available."; return
@@ -158,12 +160,12 @@ final class GeminiService: ObservableObject {
     }
 
     private func request(apiKey: String, modelIndex: Int) {
-        guard modelIndex < models.count else { isLoading = false; errorMessage = "No AI model quota is currently available."; return }
+        guard modelIndex < models.count, chatDeadline.timeIntervalSinceNow > 0.5 else { isLoading = false; errorMessage = "Gemini is temporarily unavailable. Try again."; return }
         let model = models[modelIndex]
         if usageCounts[model.id, default: 0] >= model.quota || unavailableModels.contains(model.id) { request(apiKey: apiKey, modelIndex: modelIndex + 1); return }
         currentModelID = model.id
         guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model.id):generateContent") else { unavailableModels.insert(model.id); failover(apiKey: apiKey, next: modelIndex + 1); return }
-        var request = URLRequest(url: url); request.httpMethod = "POST"
+        var request = URLRequest(url: url); request.httpMethod = "POST"; request.timeoutInterval = min(6, max(1, chatDeadline.timeIntervalSinceNow))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         let history = messages.dropFirst().map { ["role": $0.role == "model" ? "model" : "user", "parts": [["text": $0.text]]] as [String: Any] }
@@ -179,6 +181,11 @@ final class GeminiService: ObservableObject {
                 guard let self else { return }
                 self.requestTask = nil
                 if let urlError = error as? URLError, urlError.code == .cancelled { self.isLoading = false; return }
+                if let urlError = error as? URLError, urlError.code == .timedOut {
+                    self.unavailableModels.insert(model.id); self.saveUsage()
+                    self.failover(apiKey: apiKey, next: modelIndex + 1, finalMessage: "Gemini did not respond in time.")
+                    return
+                }
                 if let error { self.isLoading = false; self.errorMessage = error.localizedDescription; return }
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                 let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
@@ -206,14 +213,14 @@ final class GeminiService: ObservableObject {
         requestTask?.resume()
     }
 
-    private func requestScreen(imageData: Data, apiKey: String, modelIndex: Int, completion: @escaping (Result<GeminiScreenAnswer, Error>) -> Void) {
-        guard modelIndex < models.count else {
-            completion(.failure(NSError(domain: "Ryft.Gemini", code: 3, userInfo: [NSLocalizedDescriptionKey: "Gemini could not answer from the current screen."])))
+    private func requestScreen(imageData: Data, apiKey: String, modelIndex: Int, deadline: Date, completion: @escaping (Result<GeminiScreenAnswer, Error>) -> Void) {
+        guard modelIndex < models.count, deadline.timeIntervalSinceNow > 0.5 else {
+            completion(.failure(NSError(domain: "Ryft.Gemini", code: 3, userInfo: [NSLocalizedDescriptionKey: "Gemini is temporarily unavailable. Try Command+M again."])))
             return
         }
         let model = models[modelIndex]
         if usageCounts[model.id, default: 0] >= model.quota || unavailableModels.contains(model.id) || screenUnavailableModels.contains(model.id) {
-            requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, completion: completion)
+            requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, deadline: deadline, completion: completion)
             return
         }
         currentModelID = model.id
@@ -223,7 +230,7 @@ final class GeminiService: ObservableObject {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 35
+        request.timeoutInterval = min(5, max(1, deadline.timeIntervalSinceNow))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         let prompt = """
@@ -239,7 +246,7 @@ final class GeminiService: ObservableObject {
                 ["text": prompt],
                 ["inline_data": ["mime_type": "image/jpeg", "data": imageData.base64EncodedString()]]
             ]]],
-            "generationConfig": ["temperature": 0.0, "maxOutputTokens": 1024]
+            "generationConfig": ["temperature": 0.0, "maxOutputTokens": 512]
         ]
         do { request.httpBody = try JSONSerialization.data(withJSONObject: payload) }
         catch { completion(.failure(error)); return }
@@ -248,6 +255,11 @@ final class GeminiService: ObservableObject {
                 guard let self else { return }
                 self.screenRequestTask = nil
                 if let urlError = error as? URLError, urlError.code == .cancelled { return }
+                if let urlError = error as? URLError, urlError.code == .timedOut {
+                    self.screenUnavailableModels.insert(model.id); self.saveUsage()
+                    self.requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, deadline: deadline, completion: completion)
+                    return
+                }
                 if let error { completion(.failure(error)); return }
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                 let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
@@ -260,9 +272,9 @@ final class GeminiService: ObservableObject {
                       let content = candidates.first?["content"] as? [String: Any],
                       let parts = content["parts"] as? [[String: Any]],
                       let raw = parts.compactMap({ $0["text"] as? String }).joined().nilIfEmpty else {
-                    self.recordFailure(model, status: status, screenOnly: status == 200 || ((400..<500).contains(status) && status != 404 && status != 429))
-                    if modelIndex + 1 < self.models.count {
-                        self.requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, completion: completion)
+                    self.recordFailure(model, status: status, screenOnly: status == 200 || status >= 500 || ((400..<500).contains(status) && status != 404 && status != 429))
+                    if modelIndex + 1 < self.models.count, deadline.timeIntervalSinceNow > 0.5 {
+                        self.requestScreen(imageData: imageData, apiKey: apiKey, modelIndex: modelIndex + 1, deadline: deadline, completion: completion)
                     } else {
                         completion(.failure(NSError(domain: "Ryft.Gemini", code: status, userInfo: [NSLocalizedDescriptionKey: self.apiError(json) ?? "Gemini could not read the visible question."])))
                     }
