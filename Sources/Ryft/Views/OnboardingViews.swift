@@ -17,7 +17,7 @@ struct PermissionsSettingsView: View {
                 Text("Ryft works without optional access. Enable only the desktop features you want. Every permission is requested after you press its button, never silently at launch.").foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             SettingsGroup("System access") {
-                permissionRow("Accessibility", detail: "Allows desktop switching and macOS control actions.", symbol: "accessibility", status: AXIsProcessTrusted() ? "Allowed" : "Not allowed", granted: AXIsProcessTrusted()) {
+                permissionRow("Accessibility", detail: "Allows tiling, desktop switching, macOS controls, and reading text you explicitly select for Command+M.", symbol: "accessibility", status: AXIsProcessTrusted() ? "Allowed" : "Not allowed", granted: AXIsProcessTrusted()) {
                     WorkspaceController.requestAccessibility()
                 }
                 Divider()
@@ -36,7 +36,7 @@ struct PermissionsSettingsView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { model.statusMessage = "Permission status refreshed" }
                 }
                 Divider()
-                permissionRow("Screen Recording", detail: "Captures a temporary in-memory frame for workspace slides or Command+M visual answers. Frames are never saved.", symbol: "rectangle.on.rectangle", status: CGPreflightScreenCaptureAccess() ? "Allowed" : "Not allowed", granted: CGPreflightScreenCaptureAccess()) {
+                permissionRow("Screen Recording", detail: "Captures a temporary in-memory frame for workspace slides or Command+M when no text is selected. Frames are never saved.", symbol: "rectangle.on.rectangle", status: CGPreflightScreenCaptureAccess() ? "Allowed" : "Not allowed", granted: CGPreflightScreenCaptureAccess()) {
                     let granted = CGRequestScreenCaptureAccess()
                     model.statusMessage = granted ? "Screen Recording enabled" : "Screen Recording permission unchanged"
                 }
@@ -110,7 +110,7 @@ struct QuickStartSettingsView: View {
                 }
             }
             SettingsGroup("Useful keys") {
-                LabeledContent("Answer visible question", value: "Command + M")
+                LabeledContent("Answer selected text or visible question", value: "Command + M")
                 LabeledContent("Switch desktops", value: "Option + 1–9")
                 LabeledContent("Open Finder", value: "Command + E")
                 LabeledContent("Close a panel", value: "Escape")

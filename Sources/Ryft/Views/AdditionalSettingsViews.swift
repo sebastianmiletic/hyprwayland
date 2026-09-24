@@ -4,11 +4,95 @@ import UniformTypeIdentifiers
 import ApplicationServices
 import CoreLocation
 
+struct AssistantSettingsView: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject private var gemini: GeminiService
+
+    init(model: AppModel) {
+        self.model = model
+        gemini = model.gemini
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsGroup("Gemini connection") {
+                HStack(spacing: 10) {
+                    Circle().fill(gemini.hasAPIKey ? Color(hex: model.configuration.bar.palette.success) : Color.red).frame(width: 8, height: 8)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(gemini.hasAPIKey ? "Connected securely" : "Credential unavailable").fontWeight(.semibold)
+                        Text("Stored in macOS Keychain and cached by Ryft. It is never written to profiles, chat history, screenshots, or Git.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if gemini.hasAPIKey { Button("Remove", role: .destructive) { gemini.removeAPIKey() }.buttonStyle(.bordered) }
+                }
+                SecureField(gemini.hasAPIKey ? "Paste a replacement key" : "Paste Gemini API key", text: $gemini.apiKeyDraft)
+                    .textFieldStyle(.roundedBorder).onSubmit { gemini.saveAPIKey() }
+                HStack {
+                    Button(gemini.hasAPIKey ? "Replace key" : "Save key") { gemini.saveAPIKey() }.buttonStyle(.borderedProminent)
+                        .disabled(gemini.apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Open Google AI Studio") { gemini.openAIStudio() }.buttonStyle(.bordered)
+                }
+            }
+
+            SettingsGroup("Command+M answers") {
+                instructionRow("1", "Select text first", "When text is highlighted in the frontmost app, Command+M sends only that text to Gemini. No screenshot is captured.")
+                instructionRow("2", "Otherwise use the visible window", "Without a selection, Ryft captures the focused window in memory and asks Gemini to answer the visible question.")
+                instructionRow("3", "Copy longer answers", "Click the answer in the top-left bar to copy it. Long answers scroll across twice before disappearing.")
+                HStack {
+                    Button { model.answerQuestionOnScreen() } label: { Label("Test Command+M", systemImage: "sparkles") }.buttonStyle(.borderedProminent)
+                    Button { model.loadSelectionIntoAssistant() } label: { Label("Put selection in chat", systemImage: "text.cursor") }.buttonStyle(.bordered)
+                }
+                Text("Single choices remain visible for 3 seconds. Written answers remain until their complete marquee has passed twice. Screen capture occurs only after Command+M and is never saved.").font(.caption).foregroundStyle(.secondary)
+            }
+
+            SettingsGroup("Automatic model routing") {
+                Text("Ryft tries the highest-ranked healthy model, falls through the list on quota, timeout, or service errors, and automatically retries better models after their cooldown expires.").font(.callout).foregroundStyle(.secondary)
+                ForEach(gemini.modelUsages) { usage in
+                    HStack {
+                        Circle().fill(usage.id == gemini.currentModelID ? Color(hex: model.configuration.bar.palette.success) : Color.secondary.opacity(0.35)).frame(width: 6, height: 6)
+                        Text(usage.name)
+                        Spacer()
+                        Text("\(usage.remaining) remaining").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            SettingsGroup("Assistant sidebar") {
+                Label("Option+A opens Gemini from every application.", systemImage: "keyboard")
+                Label("Chats are stored locally and can be selected or copied.", systemImage: "doc.on.doc")
+                Label("New chat, stop, copy, selection import, key controls, token counts, and model usage are available in the panel.", systemImage: "sidebar.left")
+                HStack {
+                    Button("Open Gemini") { NotificationCenter.default.post(name: .ryftToggleLeftSidebar, object: nil) }.buttonStyle(.borderedProminent)
+                    Button("New conversation") { gemini.newConversation() }.buttonStyle(.bordered)
+                    Button("Copy last answer") { gemini.copyLastResponse() }.buttonStyle(.bordered)
+                }
+            }
+        }
+        .onAppear { gemini.refreshCredentialState() }
+    }
+
+    private func instructionRow(_ number: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 11) {
+            Text(number).font(.caption.bold()).frame(width: 22, height: 22).background(Color(hex: model.configuration.bar.palette.accent).opacity(0.2)).clipShape(Circle())
+            VStack(alignment: .leading, spacing: 2) { Text(title).fontWeight(.semibold); Text(detail).font(.caption).foregroundStyle(.secondary) }
+        }
+    }
+}
+
 struct ShortcutSettingsView: View {
     @ObservedObject var model: AppModel
     private let keys = GlobalHotkeyManager.keyCodes.keys.sorted()
     var body: some View {
-        SettingsGroup("Global shortcuts") {
+        VStack(alignment: .leading, spacing: 16) {
+        SettingsGroup("Built-in shortcuts") {
+            fixedShortcut("⌥A", "Gemini sidebar", "Opens or closes the complete assistant panel.")
+            Divider()
+            fixedShortcut("⌥N", "Controls sidebar", "Opens Wi-Fi, sound, battery, resources, notifications, and tasks.")
+            Divider()
+            fixedShortcut("⌘M", "Answer selection or screen", "Uses highlighted text when available; otherwise reads the focused window. Click a written answer to copy it.")
+            Text("These three source shortcuts remain available globally and are protected from accidental deletion. Additional mappings can be added below.").font(.caption).foregroundStyle(.secondary)
+        }
+        SettingsGroup("Editable shortcuts") {
             ForEach(Array(model.configuration.shortcuts.indices), id: \.self) { index in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
@@ -35,6 +119,14 @@ struct ShortcutSettingsView: View {
                 Button { model.configuration.shortcuts.append(ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true)) } label: { Label("Add ⌘E Finder", systemImage: "folder") }
             }
             Text("Shortcuts are re-registered immediately and work from every app. Keep at least one modifier selected. If two entries use the same combination, macOS keeps the first one.").font(.caption).foregroundStyle(.secondary)
+        }
+        }
+    }
+    private func fixedShortcut(_ keys: String, _ title: String, _ detail: String) -> some View {
+        HStack(spacing: 12) {
+            Text(keys).font(.system(.body, design: .monospaced).weight(.semibold)).frame(width: 42)
+            VStack(alignment: .leading, spacing: 2) { Text(title).fontWeight(.semibold); Text(detail).font(.caption).foregroundStyle(.secondary) }
+            Spacer()
         }
     }
     private func modifier(_ label: String, value: Binding<Bool>) -> some View {
@@ -245,7 +337,7 @@ struct GeneralSettingsView: View {
         SettingsGroup("Permissions") {
             permissionRow(
                 "Accessibility",
-                detail: "Desktop switching and macOS control actions.",
+                detail: "Tiling, desktop switching, macOS controls, and reading explicitly selected text for Command+M.",
                 symbol: "accessibility",
                 granted: permissions.accessibilityGranted
             ) { WorkspaceController.requestAccessibility() }
@@ -280,7 +372,7 @@ struct GeneralSettingsView: View {
             Divider()
             permissionRow(
                 "Screen Recording",
-                detail: "Temporary in-memory frames for workspace slides and Command+M visual answers.",
+                detail: "Temporary in-memory frames for workspace slides and Command+M when no text is selected.",
                 symbol: "rectangle.on.rectangle",
                 granted: permissions.screenRecordingGranted
             ) {
@@ -305,6 +397,11 @@ struct GeneralSettingsView: View {
             HStack { Button("Save now") { model.save() }; Button("Import profile") { model.importProfile() }; Button("Export profile") { model.exportProfile() }; Spacer(); Button("Reset defaults", role: .destructive) { model.reset() } }
             Label("Every change is saved automatically", systemImage: "checkmark.circle.fill").foregroundStyle(Color(hex: model.configuration.bar.palette.success))
             Text("Saved to ~/Library/Application Support/Ryft/config.json. Profiles include the bar, widgets, blur, colors, shortcuts, favorites, tasks, and wallpaper sources.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+        }
+        SettingsGroup("App identity and security") {
+            LabeledContent("Local signing identity", value: "Termatica Release Signing")
+            LabeledContent("Bundle identifier", value: "com.sebastianmiletic.ryft")
+            Text("Termatica signs local Ryft builds so macOS can retain Accessibility, Input Monitoring, Screen Recording, and Keychain trust across updates. It is never used to authenticate Gemini, request your Mac password, or access biometric data.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
         SettingsGroup("Desktop integration") {
             LabeledContent("Bar engine", value: "Native AppKit + SwiftUI")

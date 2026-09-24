@@ -38,7 +38,13 @@ struct LeftSidebarView: View {
                     Spacer()
                     if gemini.hasAPIKey {
                         Button { gemini.newConversation() } label: { Image(systemName: "square.and.pencil").frame(width: 26, height: 26) }.buttonStyle(.plain).help("New conversation")
-                        Menu { Button("Copy last response") { gemini.copyLastResponse() }; Divider(); Button("Remove API key", role: .destructive) { gemini.removeAPIKey() } } label: { Image(systemName: "ellipsis").frame(width: 26, height: 26) }.menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 26)
+                        Menu {
+                            Button("Use selected text") { model.loadSelectionIntoAssistant() }
+                            Button("Copy last response") { gemini.copyLastResponse() }
+                            Button("Assistant settings") { model.selectedSection = .assistant; NotificationCenter.default.post(name: .ryftShowSettings, object: nil); close() }
+                            Divider()
+                            Button("Remove API key", role: .destructive) { gemini.removeAPIKey() }
+                        } label: { Image(systemName: "ellipsis").frame(width: 26, height: 26) }.menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 26)
                     } else { Circle().fill(Color(hex: palette.muted)).frame(width: 7, height: 7) }
                 }.padding(.trailing, 34)
 
@@ -73,7 +79,16 @@ struct LeftSidebarView: View {
                                 if message.role == "user" { Spacer(minLength: 42) }
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(LocalizedStringKey(message.text)).textSelection(.enabled)
-                                    if message.role == "model", let id = message.model { Text(id).font(.system(size: 8, weight: .medium, design: .monospaced)).opacity(0.55) }
+                                    if message.role == "model" {
+                                        HStack(spacing: 6) {
+                                            if let id = message.model { Text(id).font(.system(size: 8, weight: .medium, design: .monospaced)).opacity(0.55) }
+                                            Spacer(minLength: 4)
+                                            Button {
+                                                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(message.text, forType: .string)
+                                            } label: { Image(systemName: "doc.on.doc").font(.system(size: 9, weight: .semibold)) }
+                                                .buttonStyle(.plain).help("Copy answer")
+                                        }
+                                    }
                                 }.padding(.horizontal, 12).padding(.vertical, 10)
                                     .background(Color(hex: message.role == "user" ? palette.accent : palette.surface))
                                     .foregroundStyle(Color(hex: message.role == "user" ? palette.background : palette.foreground))
@@ -88,12 +103,19 @@ struct LeftSidebarView: View {
             }
             if !gemini.errorMessage.isEmpty { Text(gemini.errorMessage).font(.caption).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading) }
             HStack(spacing: 8) {
+                Button { model.loadSelectionIntoAssistant() } label: { Image(systemName: "text.cursor").frame(width: 24, height: 24) }
+                    .buttonStyle(.plain).help("Use selected text")
                 TextField("Message Gemini", text: $gemini.draft, axis: .vertical).textFieldStyle(.plain).lineLimit(1...5).onSubmit { gemini.send() }
                 Button { gemini.isLoading ? gemini.stop() : gemini.send() } label: {
                     Image(systemName: gemini.isLoading ? "stop.fill" : "arrow.up").fontWeight(.bold).frame(width: 30, height: 30).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(Circle())
                 }.buttonStyle(.plain).disabled(!gemini.isLoading && gemini.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }.padding(10).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 15))
-            HStack { Text("Chats stay on this Mac").font(.caption2).foregroundStyle(Color(hex: palette.muted)); Spacer(); if gemini.inputTokens + gemini.outputTokens > 0 { Text("\(gemini.inputTokens) in · \(gemini.outputTokens) out").font(.caption2.monospacedDigit()).foregroundStyle(Color(hex: palette.muted)) }; Text("⌥A").font(.caption.monospaced()).foregroundStyle(Color(hex: palette.muted)) }
+            HStack {
+                Text("Local history · select text, then ⌘M").font(.caption2).foregroundStyle(Color(hex: palette.muted))
+                Spacer()
+                if gemini.inputTokens + gemini.outputTokens > 0 { Text("\(gemini.inputTokens) in · \(gemini.outputTokens) out").font(.caption2.monospacedDigit()).foregroundStyle(Color(hex: palette.muted)) }
+                Text("⌥A").font(.caption.monospaced()).foregroundStyle(Color(hex: palette.muted))
+            }
         }
     }
     private var modelUsage: some View {

@@ -247,6 +247,11 @@ final class AppModel: ObservableObject {
         screenAnswerLoading = true
         screenAnswer = ""
         screenAnswerIsChoice = false
+        if let selectedText = SelectedTextService.currentSelection() {
+            statusMessage = "Answering selected text…"
+            gemini.answerSelection(selectedText) { [weak self] result in self?.handleScreenAnswer(result) }
+            return
+        }
         statusMessage = "Reading the current screen…"
         switch ScreenQuestionCaptureService.capture() {
         case .failure(let error):
@@ -256,25 +261,41 @@ final class AppModel: ObservableObject {
             statusMessage = error.localizedDescription
             scheduleScreenAnswerReset(after: 8)
         case .success(let imageData):
-            gemini.answerScreen(imageData: imageData) { [weak self] result in
-                guard let self else { return }
-                self.screenAnswerLoading = false
-                switch result {
-                case .success(let answer):
-                    self.screenAnswerStartedAt = Date()
-                    self.screenAnswer = answer.text
-                    self.screenAnswerIsChoice = answer.isMultipleChoice
-                    self.statusMessage = "Answered from the current screen"
-                    self.scheduleScreenAnswerReset(after: answer.isMultipleChoice ? 3 : ScreenAnswerMarqueeMetrics.displayDuration(for: answer.text))
-                case .failure(let error):
-                    self.screenAnswerStartedAt = Date()
-                    self.screenAnswer = String(error.localizedDescription.prefix(140))
-                    self.screenAnswerIsChoice = false
-                    self.statusMessage = error.localizedDescription
-                    self.scheduleScreenAnswerReset(after: 8)
-                }
-            }
+            gemini.answerScreen(imageData: imageData) { [weak self] result in self?.handleScreenAnswer(result) }
         }
+    }
+
+    private func handleScreenAnswer(_ result: Result<GeminiScreenAnswer, Error>) {
+        screenAnswerLoading = false
+        screenAnswerStartedAt = Date()
+        switch result {
+        case .success(let answer):
+            screenAnswer = answer.text
+            screenAnswerIsChoice = answer.isMultipleChoice
+            statusMessage = "Answer ready · click it to copy"
+            scheduleScreenAnswerReset(after: answer.isMultipleChoice ? 3 : ScreenAnswerMarqueeMetrics.displayDuration(for: answer.text))
+        case .failure(let error):
+            screenAnswer = String(error.localizedDescription.prefix(140))
+            screenAnswerIsChoice = false
+            statusMessage = error.localizedDescription
+            scheduleScreenAnswerReset(after: 8)
+        }
+    }
+
+    func copyScreenAnswer() {
+        guard !screenAnswer.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(screenAnswer, forType: .string)
+        statusMessage = "Answer copied"
+    }
+
+    func loadSelectionIntoAssistant() {
+        guard let selection = SelectedTextService.currentSelection() else {
+            statusMessage = "Select text in another application first"
+            return
+        }
+        gemini.draft = selection
+        statusMessage = "Selected text added to Gemini"
     }
 
     private func scheduleScreenAnswerReset(after delay: TimeInterval) {
@@ -515,13 +536,13 @@ final class AppModel: ObservableObject {
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
-    case home = "Overview", permissions = "Permissions", guide = "Quick Start", bar = "Bar", themes = "Themes", modules = "Widgets", tiling = "Tiling", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
+    case home = "Overview", permissions = "Permissions", guide = "Quick Start", bar = "Bar", themes = "Themes", modules = "Widgets", tiling = "Tiling", assistant = "Assistant", shortcuts = "Keybinds", wallpapers = "Wallpapers", general = "General"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .home: "house.fill"; case .permissions: "hand.raised.fill"; case .guide: "lightbulb.fill"
         case .bar: "menubar.rectangle"; case .themes: "paintpalette"; case .modules: "square.grid.2x2"
-        case .tiling: "rectangle.split.2x2"; case .shortcuts: "command"; case .wallpapers: "photo.on.rectangle.angled"; case .general: "gearshape"
+        case .tiling: "rectangle.split.2x2"; case .assistant: "sparkles"; case .shortcuts: "command"; case .wallpapers: "photo.on.rectangle.angled"; case .general: "gearshape"
         }
     }
 }

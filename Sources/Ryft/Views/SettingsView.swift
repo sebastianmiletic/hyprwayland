@@ -119,6 +119,7 @@ struct SettingsView: View {
         case .themes: ThemeSettingsView(model: model)
         case .modules: ModuleSettingsView(model: model)
         case .tiling: TilingSettingsView(model: model)
+        case .assistant: AssistantSettingsView(model: model)
         case .shortcuts: ShortcutSettingsView(model: model)
         case .wallpapers: WallpaperGalleryView(model: model, standalone: false)
         case .general: GeneralSettingsView(model: model)
@@ -143,6 +144,7 @@ private struct PageHeader: View {
         case .themes: "Choose a preset or tune every color."
         case .modules: "Decide what earns space in the bar."
         case .tiling: "Automatically arrange new windows with a Hyprland-style Dwindle layout."
+        case .assistant: "Configure Gemini, selected-text answers, model routing, and privacy."
         case .shortcuts: "Map global controls that work from any app."
         case .wallpapers: "Pick an image for every connected display."
         case .general: "Profiles, permissions, and startup behavior."

@@ -307,6 +307,9 @@ private struct WidgetView: View {
     @ViewBuilder var body: some View {
         if widget.kind == .workspaces {
             content.modifier(WidgetChrome(widget: widget, palette: palette)).accessibilityLabel(widget.name).help(widget.name)
+        } else if widget.kind == .leftSidebar && !model.screenAnswer.isEmpty {
+            Button { model.copyScreenAnswer() } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
+                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel("Copy AI answer").help("Copy answer")
         } else if widget.kind == .rightSidebar && model.configuration.bar.sourceExact {
             content.modifier(WidgetChrome(widget: widget, palette: palette)).accessibilityLabel(widget.name).help(widget.name)
         } else if widget.kind == .rightSidebar {
