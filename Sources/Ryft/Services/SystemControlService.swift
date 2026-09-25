@@ -40,7 +40,11 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     // Constructing it during SwiftUI's early model initialization gives
     // locationd an empty bundle identity, so macOS cannot persist its decision.
     private lazy var locationManager: CLLocationManager = {
-        let manager = CLLocationManager(); manager.delegate = self; return manager
+        let manager = CLLocationManager()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+        manager.pausesLocationUpdatesAutomatically = true
+        return manager
     }()
     private var levelTimer: Timer?
     private var powerTimer: Timer?
@@ -93,17 +97,27 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         switch locationManager.authorizationStatus {
         case .authorized, .authorizedAlways: scanWiFi()
         case .notDetermined:
-            // This method is only reached after an explicit user click. Asking
-            // every time the state is genuinely undetermined also recovers from
-            // a TCC reset instead of being blocked by stale app preferences.
+            // Retain and actively use the same manager through authorization.
+            // This prevents System Settings from treating the request as an
+            // abandoned transient client and immediately reverting its toggle.
             locationManager.requestWhenInUseAuthorization()
+            locationManager.startUpdatingLocation()
         case .denied, .restricted: operationMessage = "Allow Location in Privacy & Security to list nearby Wi-Fi networks."
         @unknown default: operationMessage = "Nearby Wi-Fi networks are unavailable."
         }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        if manager.authorizationStatus == .authorized || manager.authorizationStatus == .authorizedAlways { scanWiFi() }
+        if manager.authorizationStatus == .authorized || manager.authorizationStatus == .authorizedAlways {
+            manager.startUpdatingLocation()
+            scanWiFi()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { manager.stopUpdatingLocation() }
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) { manager.stopUpdatingLocation() }
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        if (error as? CLError)?.code != .denied { operationMessage = "Location check: \(error.localizedDescription)" }
     }
 
     func refreshWiFiState() {

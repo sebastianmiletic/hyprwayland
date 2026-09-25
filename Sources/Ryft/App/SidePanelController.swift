@@ -8,6 +8,7 @@ final class SidePanelController {
     private var rightPanel: FloatingPanel?
     private var activityMonitor: Any?
     private var outsideClickMonitor: Any?
+    private var spaceObserver: NSObjectProtocol?
     private var inactivityTask: DispatchWorkItem?
     init(model: AppModel) {
         self.model = model
@@ -29,12 +30,21 @@ final class SidePanelController {
             if let panel = self.rightPanel, panel.isVisible { self.dismiss(panel, side: .right) }
             if let panel = self.leftPanel, panel.isVisible, !self.model.assistantPanelLocked { self.dismiss(panel, side: .left) }
         }
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self, self.model.assistantPanelLocked, let panel = self.leftPanel else { return }
+            // A locked assistant is a stationary shell surface. Reassert its
+            // frame and ordering on every Space transition so Mission Control
+            // can never strand it on the outgoing desktop.
+            panel.setFrame(self.targetFrame(side: .left), display: true)
+            panel.orderFrontRegardless()
+        }
     }
 
     deinit {
         inactivityTask?.cancel()
         if let activityMonitor { NSEvent.removeMonitor(activityMonitor) }
         if let outsideClickMonitor { NSEvent.removeMonitor(outsideClickMonitor) }
+        if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
     }
 
     func toggleLeft() {
@@ -69,7 +79,7 @@ final class SidePanelController {
     private func makePanel(side: Side) -> FloatingPanel {
         let panel = FloatingPanel(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
         panel.level = .floating; panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = true; panel.acceptsMouseMovedEvents = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]; panel.isReleasedWhenClosed = false
         panel.onCancel = { [weak self, weak panel] in if let self, let panel { self.dismiss(panel, side: side) } }
         let close = { [weak self, weak panel] in if let self, let panel { self.dismiss(panel, side: side) } }
         panel.contentView = NSHostingView(rootView: side == .left ? AnyView(LeftSidebarView(model: model, close: close)) : AnyView(RightSidebarView(model: model, close: close)))

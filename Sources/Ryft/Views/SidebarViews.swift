@@ -144,20 +144,29 @@ struct LeftSidebarView: View {
                 }
             }
             if !gemini.errorMessage.isEmpty { Text(gemini.errorMessage).font(.caption).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading) }
-            HStack(spacing: 8) {
-                Menu {
-                    command("/new", "New conversation")
-                    command("/clear", "Clear conversation")
-                    command("/copy", "Copy last answer")
-                    command("/model", "Show current model")
-                    command("/help", "List commands")
-                } label: { Image(systemName: "slash.circle").frame(width: 24, height: 24) }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 24).help("Assistant commands")
-                TextField("Message Gemini or type /help", text: $gemini.draft, axis: .vertical).textFieldStyle(.plain).lineLimit(1...5).onSubmit { gemini.send() }
-                Button { gemini.isLoading ? gemini.stop() : gemini.send() } label: {
-                    Image(systemName: gemini.isLoading ? "stop.fill" : "arrow.up").fontWeight(.bold).frame(width: 30, height: 30).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(Circle())
-                }.buttonStyle(.plain).disabled(!gemini.isLoading && gemini.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }.padding(10).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 15))
+            VStack(spacing: 0) {
+                if !matchingCommands.isEmpty {
+                    VStack(spacing: 2) {
+                        ForEach(matchingCommands, id: \.value) { item in
+                            Button { gemini.draft = item.value; gemini.send() } label: {
+                                HStack(spacing: 9) {
+                                    Text(item.value).font(.system(.caption, design: .monospaced).weight(.semibold)).foregroundStyle(Color(hex: palette.accent)).frame(width: 68, alignment: .leading)
+                                    Text(item.label).font(.caption).foregroundStyle(Color(hex: palette.foreground)); Spacer()
+                                }.padding(.horizontal, 10).frame(height: 30)
+                            }.buttonStyle(.plain)
+                        }
+                    }.padding(.vertical, 5).background(Color(hex: palette.background).opacity(0.96))
+                    Divider().opacity(0.25)
+                }
+                HStack(spacing: 8) {
+                    Button { gemini.draft = "/" } label: { Image(systemName: "slash.circle").frame(width: 24, height: 24) }
+                        .buttonStyle(.plain).help("Show assistant commands")
+                    TextField("Message Gemini or type /help", text: $gemini.draft, axis: .vertical).textFieldStyle(.plain).lineLimit(1...5).onSubmit { gemini.send() }
+                    Button { gemini.isLoading ? gemini.stop() : gemini.send() } label: {
+                        Image(systemName: gemini.isLoading ? "stop.fill" : "arrow.up").fontWeight(.bold).frame(width: 30, height: 30).background(Color(hex: palette.accent)).foregroundStyle(Color(hex: palette.background)).clipShape(Circle())
+                    }.buttonStyle(.plain).disabled(!gemini.isLoading && gemini.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }.padding(10)
+            }.background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 15))
             HStack(spacing: 6) {
                 Circle().fill(Color(hex: palette.success)).frame(width: 5, height: 5)
                 Text(activeUsage?.name ?? gemini.currentModelName).font(.caption2.weight(.semibold)).lineLimit(1)
@@ -166,8 +175,16 @@ struct LeftSidebarView: View {
             }.foregroundStyle(Color(hex: palette.muted))
         }
     }
-    private func command(_ value: String, _ label: String) -> some View {
-        Button("\(value)  \(label)") { gemini.draft = value; gemini.send() }
+    private var matchingCommands: [(value: String, label: String)] {
+        let commands = [
+            ("/new", "New conversation"), ("/clear", "Clear conversation"),
+            ("/copy", "Copy last answer"), ("/model", "Show current model"),
+            ("/stop", "Stop generating"), ("/help", "List commands"),
+            ("/commands", "List commands")
+        ]
+        let query = gemini.draft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard query.hasPrefix("/"), !query.contains(" ") else { return [] }
+        return commands.filter { query == "/" || $0.0.hasPrefix(query) }
     }
     private var activeUsage: GeminiModelUsage? {
         gemini.modelUsages.first(where: { $0.id == gemini.currentModelID }) ?? gemini.modelUsages.first

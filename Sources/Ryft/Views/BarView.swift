@@ -322,14 +322,7 @@ private struct WidgetView: View {
         } else if widget.kind == .battery {
             Button { if actionEnabled { controls.setLowPowerMode(!controls.lowPowerMode) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel("Toggle Low Power Mode").help("Left-click toggles Low Power Mode. Right-click opens battery controls.")
-                .contextMenu {
-                    Button(controls.lowPowerMode ? "Turn Off Low Power Mode" : "Turn On Low Power Mode") { controls.setLowPowerMode(!controls.lowPowerMode) }
-                    if controls.supportsHighPowerMode {
-                        Button(controls.highPowerMode ? "Use Automatic Power Mode" : "Turn On High Power Mode") { controls.setHighPowerMode(!controls.highPowerMode) }
-                    }
-                    Divider()
-                    Button("Battery Details") { showStatusPopover(for: .battery) }
-                }
+                .background(RightClickCapture { showStatusPopover(for: .battery) })
                 .popover(isPresented: popoverPresented, arrowEdge: model.configuration.bar.position.popoverEdge) { statusPopover }
         } else if [.wifi, .volume].contains(widget.kind) {
             Button { if actionEnabled { showStatusPopover(for: widget.kind) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
@@ -463,14 +456,7 @@ private struct WidgetView: View {
                 .frame(width: 25, height: 24)
         }
         .buttonStyle(SourcePressButtonStyle()).help("Battery")
-        .contextMenu {
-            Button(controls.lowPowerMode ? "Turn Off Low Power Mode" : "Turn On Low Power Mode") { controls.setLowPowerMode(!controls.lowPowerMode) }
-            if controls.supportsHighPowerMode {
-                Button(controls.highPowerMode ? "Use Automatic Power Mode" : "Turn On High Power Mode") { controls.setHighPowerMode(!controls.highPowerMode) }
-            }
-            Divider()
-            Button("Battery Details") { showStatusPopover(for: .battery) }
-        }
+        .background(RightClickCapture { showStatusPopover(for: .battery) })
     }
     private func detailButton(_ icon: String, detail: String, color: Color? = nil) -> some View {
         Button {
@@ -630,6 +616,39 @@ private struct ResourceUsagePopover: View {
     }
     private func summary(_ title: String, _ value: String, _ icon: String) -> some View {
         HStack(spacing: 8) { Image(systemName: icon).foregroundStyle(Color(hex: palette.accent)); VStack(alignment: .leading, spacing: 1) { Text(title).font(.caption2).foregroundStyle(Color(hex: palette.muted)); Text(value).font(.headline.monospacedDigit()) }; Spacer() }.padding(10).frame(maxWidth: .infinity).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 11))
+    }
+}
+
+private struct RightClickCapture: NSViewRepresentable {
+    let action: () -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { context.coordinator.install(view: view) }
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.action = action
+        DispatchQueue.main.async { context.coordinator.install(view: view) }
+    }
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { coordinator.remove() }
+    final class Coordinator {
+        var action: () -> Void
+        weak var view: NSView?
+        private var monitor: Any?
+        init(action: @escaping () -> Void) { self.action = action }
+        func install(view: NSView) {
+            guard self.view !== view else { return }
+            remove(); self.view = view
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown) { [weak self] event in
+                guard let self, let view = self.view, event.window === view.window else { return event }
+                let point = view.convert(event.locationInWindow, from: nil)
+                guard view.bounds.contains(point) else { return event }
+                DispatchQueue.main.async { self.action() }
+                return nil
+            }
+        }
+        func remove() { if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil; view = nil }
     }
 }
 
