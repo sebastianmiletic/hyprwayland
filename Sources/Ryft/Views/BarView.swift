@@ -315,9 +315,9 @@ private struct WidgetView: View {
         } else if widget.kind == .rightSidebar {
             Button { if actionEnabled { performAction() } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.name)
-        } else if widget.kind == .wallpaper || widget.kind == .uptime || widget.kind == .clock {
+        } else if widget.kind == .wallpaper || widget.kind == .uptime || widget.kind == .clock || widget.kind == .tray {
             Button { if actionEnabled { showStatusPopover(for: widget.kind) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
-                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.kind == .wallpaper ? "Choose wallpaper" : "Application resource usage")
+                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.kind == .wallpaper ? "Choose wallpaper" : widget.kind == .tray ? "Menu bar apps" : "Application resource usage")
                 .popover(isPresented: popoverPresented, arrowEdge: model.configuration.bar.position.popoverEdge) { statusPopover }
         } else if widget.kind == .battery {
             Button { if actionEnabled { controls.setLowPowerMode(!controls.lowPowerMode) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
@@ -408,6 +408,7 @@ private struct WidgetView: View {
             }
         case .volume: widgetLabel("\(Int(controls.outputVolume))%")
         case .uptime: widgetLabel("CPU \(system.cpu) · RAM \(system.memory)")
+        case .tray: widgetLabel("Menu apps")
         case .rightSidebar:
             if model.configuration.bar.position.isVertical { widgetLabel("Controls") }
             else if model.configuration.bar.sourceExact {
@@ -433,6 +434,7 @@ private struct WidgetView: View {
             if model.statusPopoverDetail == "Wallpapers" { WallpaperBarPopover(model: model).frame(width: 520) }
             else if model.statusPopoverDetail == "Resources" { ResourceUsagePopover(model: model).frame(width: 390) }
             else if model.statusPopoverDetail == "Calendar" { CalendarTodoPopover(model: model).frame(width: 560) }
+            else if model.statusPopoverDetail == "MenuBarApps" { MenuBarAppsPopover(model: model).frame(width: 300) }
             else { StatusQuickPopover(model: model, detail: model.statusPopoverDetail).frame(width: 300) }
         }
     }
@@ -441,6 +443,7 @@ private struct WidgetView: View {
         case .wallpaper: model.statusPopoverDetail = "Wallpapers"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id
         case .uptime: model.statusPopoverDetail = "Resources"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; system.refresh()
         case .clock: model.statusPopoverDetail = "Calendar"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id
+        case .tray: model.statusPopoverDetail = "MenuBarApps"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; model.menuBarItems.refresh()
         case .wifi: model.statusPopoverDetail = "Wi-Fi"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.prepareWiFiMenu()
         case .volume: model.statusPopoverDetail = "Sound"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.prepareSoundMenu()
         case .battery: model.statusPopoverDetail = "Battery"; model.statusPopoverInteractionID = interactionID; model.statusPopoverWidgetID = widget.id; controls.refreshPowerState()
@@ -782,6 +785,50 @@ private final class WallpaperKeyView: NSView {
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); DispatchQueue.main.async { self.window?.makeFirstResponder(self) } }
     override func keyDown(with event: NSEvent) {
         switch event.keyCode { case 123: left(); case 124: right(); case 126: up(); case 125: down(); case 36, 76: enter(); default: super.keyDown(with: event) }
+    }
+}
+
+private struct MenuBarAppsPopover: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject private var service: MenuBarItemService
+    private var palette: ThemePalette { model.configuration.bar.palette }
+    init(model: AppModel) { self.model = model; service = model.menuBarItems }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "chevron.down").foregroundStyle(Color(hex: palette.accent))
+                Text("Menu bar apps").font(.system(size: 15, weight: .semibold, design: .rounded))
+                Spacer()
+                Button { service.refresh() } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.plain)
+            }
+            Rectangle().fill(Color(hex: palette.muted).opacity(0.25)).frame(height: 1)
+            if service.items.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "menubar.rectangle").font(.title2)
+                    Text(service.status).font(.caption).multilineTextAlignment(.center)
+                    if !model.permissions.accessibilityGranted {
+                        Button("Review Accessibility") { WorkspaceController.requestAccessibility() }.buttonStyle(QuickPopoverButtonStyle(palette: palette))
+                    }
+                }.foregroundStyle(Color(hex: palette.muted)).frame(maxWidth: .infinity, minHeight: 90)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 5) {
+                        ForEach(service.items) { item in
+                            Button { service.activate(item) } label: {
+                                HStack(spacing: 10) {
+                                    Group { if let icon = item.icon { Image(nsImage: icon).resizable().scaledToFit() } else { Image(systemName: "app") } }.frame(width: 22, height: 22)
+                                    VStack(alignment: .leading, spacing: 1) { Text(item.title).lineLimit(1); if item.title != item.applicationName { Text(item.applicationName).font(.caption2).foregroundStyle(Color(hex: palette.muted)).lineLimit(1) } }
+                                    Spacer(); Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Color(hex: palette.muted))
+                                }.padding(.horizontal, 10).frame(height: 40).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 10))
+                            }.buttonStyle(SourcePressButtonStyle())
+                        }
+                    }
+                }.frame(maxHeight: 280)
+            }
+        }
+        .padding(16).background(Color(hex: palette.background)).foregroundStyle(Color(hex: palette.foreground))
+        .background(OutsideClickDismissMonitor { model.statusPopoverWidgetID = nil; model.statusPopoverInteractionID = nil; model.statusPopoverDetail = "" })
+        .onAppear { service.refresh() }
     }
 }
 

@@ -62,6 +62,7 @@ final class AppModel: ObservableObject {
     let system = SystemMonitor()
     let permissions = RyftPermissionMonitor.shared
     let controls = SystemControlService()
+    let menuBarItems = MenuBarItemService()
     lazy var notifications = NotificationDaemon(controls: controls)
     let workspaces = WorkspaceService()
     let tiling = DwindleTilingService()
@@ -211,6 +212,14 @@ final class AppModel: ObservableObject {
                 configuration.savedBars[index].name = "Classic"
             }
             configuration.sourcePresetVersion = 16
+        }
+        if configuration.sourcePresetVersion < 17 {
+            if !configuration.bar.widgets.contains(where: { $0.kind == .tray }) {
+                let tray = WidgetConfiguration(kind: .tray, name: "Dropdown", placement: .trailing, icon: "chevron.down", showLabel: false, style: .plain)
+                let index = configuration.bar.widgets.firstIndex(where: { $0.kind == .settings }) ?? configuration.bar.widgets.endIndex
+                configuration.bar.widgets.insert(tray, at: index)
+            }
+            configuration.sourcePresetVersion = 17
         }
         // Wallpaper and side-panel entry points are bar/settings-only, including imported profiles.
         configuration.shortcuts.removeAll { $0.action == .wallpaper || $0.action == .randomWallpaper || $0.action == .leftSidebar || $0.action == .rightSidebar }

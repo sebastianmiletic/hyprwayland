@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import QuartzCore
+import Combine
 
 final class SidePanelController {
     private let model: AppModel
@@ -9,6 +10,7 @@ final class SidePanelController {
     private var activityMonitor: Any?
     private var outsideClickMonitor: Any?
     private var spaceObserver: NSObjectProtocol?
+    private var lockCancellable: AnyCancellable?
     private var inactivityTask: DispatchWorkItem?
     init(model: AppModel) {
         self.model = model
@@ -30,13 +32,25 @@ final class SidePanelController {
             if let panel = self.rightPanel, panel.isVisible { self.dismiss(panel, side: .right) }
             if let panel = self.leftPanel, panel.isVisible, !self.model.assistantPanelLocked { self.dismiss(panel, side: .left) }
         }
+        lockCancellable = model.$assistantPanelLocked.removeDuplicates().sink { [weak self] locked in
+            guard locked, let self, let panel = self.leftPanel else { return }
+            self.attachToEveryDesktop(panel)
+            panel.orderFrontRegardless()
+        }
         spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self, self.model.assistantPanelLocked, let panel = self.leftPanel else { return }
             // A locked assistant is a stationary shell surface. Reassert its
             // frame and ordering on every Space transition so Mission Control
             // can never strand it on the outgoing desktop.
             panel.setFrame(self.targetFrame(side: .left), display: true)
+            self.attachToEveryDesktop(panel)
             panel.orderFrontRegardless()
+            for delay in [0.03, 0.12, 0.28] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    guard self.model.assistantPanelLocked else { return }
+                    panel.orderFrontRegardless()
+                }
+            }
         }
     }
 
@@ -73,6 +87,27 @@ final class SidePanelController {
         }
         inactivityTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: task)
+    }
+
+    private func attachToEveryDesktop(_ panel: NSPanel) {
+        typealias MainConnection = @convention(c) () -> UInt32
+        typealias CopySpaces = @convention(c) (UInt32) -> Unmanaged<CFArray>?
+        typealias AddWindows = @convention(c) (UInt32, CFArray, CFArray) -> Void
+        guard let library = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY),
+              let mainSymbol = dlsym(library, "CGSMainConnectionID"),
+              let copySymbol = dlsym(library, "CGSCopyManagedDisplaySpaces"),
+              let addSymbol = dlsym(library, "SLSAddWindowsToSpaces") else { return }
+        defer { dlclose(library) }
+        let main = unsafeBitCast(mainSymbol, to: MainConnection.self)
+        let copy = unsafeBitCast(copySymbol, to: CopySpaces.self)
+        let add = unsafeBitCast(addSymbol, to: AddWindows.self)
+        let connection = main()
+        guard let displays = copy(connection)?.takeRetainedValue() as? [[String: Any]] else { return }
+        let ids = displays.flatMap { ($0["Spaces"] as? [[String: Any]] ?? []) }
+            .filter { ($0["type"] as? NSNumber)?.intValue == 0 }
+            .compactMap { ($0["ManagedSpaceID"] as? NSNumber).map { NSNumber(value: $0.uint64Value) } }
+        guard !ids.isEmpty else { return }
+        add(connection, [NSNumber(value: panel.windowNumber)] as CFArray, ids as CFArray)
     }
 
     private enum Side { case left, right }
