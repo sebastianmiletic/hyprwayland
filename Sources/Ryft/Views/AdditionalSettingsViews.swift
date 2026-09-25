@@ -369,7 +369,7 @@ struct GeneralSettingsView: View {
                 symbol: "location",
                 granted: permissions.locationGranted
             ) {
-                let status = CLLocationManager().authorizationStatus
+                let status = CLLocationManager.authorizationStatus()
                 if status == .notDetermined { model.controls.requestWiFiAccessAndScan() }
                 else { WorkspaceController.openPrivacyPane("Privacy_LocationServices") }
             }

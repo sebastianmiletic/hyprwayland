@@ -10,7 +10,7 @@ struct RyftPermissionStatus {
     static var screenRecordingGranted: Bool { CGPreflightScreenCaptureAccess() || UserDefaults.standard.bool(forKey: "RyftVerifiedScreenRecording") }
 
     static var locationGranted: Bool {
-        let status = CLLocationManager().authorizationStatus
+        let status = CLLocationManager.authorizationStatus()
         return status == .authorized || status == .authorizedAlways
     }
 

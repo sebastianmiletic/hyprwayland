@@ -26,7 +26,7 @@ struct PermissionsSettingsView: View {
                 }
                 Divider()
                 permissionRow("Location for Wi-Fi", detail: "macOS requires Location to reveal nearby network names. Ryft does not store location data.", symbol: "location", status: locationLabel, granted: locationGranted) {
-                    if CLLocationManager().authorizationStatus == .notDetermined { model.controls.requestWiFiAccessAndScan() }
+                    if CLLocationManager.authorizationStatus() == .notDetermined { model.controls.requestWiFiAccessAndScan() }
                     else { WorkspaceController.openPrivacyPane("Privacy_LocationServices") }
                 }
                 Divider()
@@ -52,11 +52,11 @@ struct PermissionsSettingsView: View {
     }
 
     private var locationGranted: Bool {
-        let status = CLLocationManager().authorizationStatus
+        let status = CLLocationManager.authorizationStatus()
         return status == .authorized || status == .authorizedAlways
     }
     private var locationLabel: String {
-        switch CLLocationManager().authorizationStatus {
+        switch CLLocationManager.authorizationStatus() {
         case .authorized, .authorizedAlways: "Allowed"
         case .denied, .restricted: "Not allowed"
         case .notDetermined: "Not requested"

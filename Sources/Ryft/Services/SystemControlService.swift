@@ -95,7 +95,11 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
 
     func requestWiFiAccessAndScan() {
         switch locationManager.authorizationStatus {
-        case .authorized, .authorizedAlways: scanWiFi()
+        case .authorized, .authorizedAlways:
+            // CoreWLAN can continue returning redacted/empty scan results until
+            // locationd has delivered at least one update to this process.
+            locationManager.startUpdatingLocation()
+            scanWiFi()
         case .notDetermined:
             // Retain and actively use the same manager through authorization.
             // This prevents System Settings from treating the request as an
@@ -111,11 +115,14 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         if manager.authorizationStatus == .authorized || manager.authorizationStatus == .authorizedAlways {
             manager.startUpdatingLocation()
             scanWiFi()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { manager.stopUpdatingLocation() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { manager.stopUpdatingLocation() }
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) { manager.stopUpdatingLocation() }
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        manager.stopUpdatingLocation()
+        scanWiFi()
+    }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         if (error as? CLError)?.code != .denied { operationMessage = "Location check: \(error.localizedDescription)" }
     }
@@ -132,9 +139,15 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         catch { operationMessage = "Wi-Fi: \(error.localizedDescription)" }
     }
 
-    func scanWiFi() {
-        guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else { wifiNetworks = []; return }
+    func scanWiFi() { scanWiFi(attempt: 0) }
+
+    private func scanWiFi(attempt: Int) {
+        guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else {
+            wifiNetworks = []; scanningWiFi = false; operationMessage = wifiEnabled ? "Wi-Fi interface is unavailable." : "Wi-Fi is off."
+            return
+        }
         scanningWiFi = true
+        if attempt == 0 { operationMessage = "Scanning nearby networks…" }
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let results = try interface.scanForNetworks(withSSID: nil)
@@ -146,8 +159,26 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
                 }.sorted { $0.signal > $1.signal }
                 var seen = Set<String>()
                 let unique = mapped.filter { seen.insert($0.ssid).inserted }
-                DispatchQueue.main.async { self.wifiNetworks = unique; self.scanningWiFi = false; self.refreshWiFiState() }
-            } catch { DispatchQueue.main.async { self.operationMessage = "Wi-Fi scan: \(error.localizedDescription)"; self.scanningWiFi = false } }
+                DispatchQueue.main.async {
+                    if unique.isEmpty, attempt < 2 {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + Double(attempt + 1)) { self.scanWiFi(attempt: attempt + 1) }
+                    } else {
+                        self.wifiNetworks = unique
+                        self.scanningWiFi = false
+                        self.operationMessage = unique.isEmpty ? "No nearby networks found. Toggle Location access off and on, then refresh." : ""
+                        self.refreshWiFiState()
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    if attempt < 2 {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + Double(attempt + 1)) { self.scanWiFi(attempt: attempt + 1) }
+                    } else {
+                        self.operationMessage = "Wi-Fi scan: \(error.localizedDescription)"
+                        self.scanningWiFi = false
+                    }
+                }
+            }
         }
     }
 

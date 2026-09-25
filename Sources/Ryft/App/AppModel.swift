@@ -62,7 +62,6 @@ final class AppModel: ObservableObject {
     let system = SystemMonitor()
     let permissions = RyftPermissionMonitor.shared
     let controls = SystemControlService()
-    let menuBarItems = MenuBarItemService()
     lazy var notifications = NotificationDaemon(controls: controls)
     let workspaces = WorkspaceService()
     let tiling = DwindleTilingService()
@@ -213,14 +212,6 @@ final class AppModel: ObservableObject {
             }
             configuration.sourcePresetVersion = 16
         }
-        if configuration.sourcePresetVersion < 17 {
-            if !configuration.bar.widgets.contains(where: { $0.kind == .tray }) {
-                let tray = WidgetConfiguration(kind: .tray, name: "Dropdown", placement: .trailing, icon: "chevron.down", showLabel: false, style: .plain)
-                let index = configuration.bar.widgets.firstIndex(where: { $0.kind == .settings }) ?? configuration.bar.widgets.endIndex
-                configuration.bar.widgets.insert(tray, at: index)
-            }
-            configuration.sourcePresetVersion = 17
-        }
         // Wallpaper and side-panel entry points are bar/settings-only, including imported profiles.
         configuration.shortcuts.removeAll { $0.action == .wallpaper || $0.action == .randomWallpaper || $0.action == .leftSidebar || $0.action == .rightSidebar }
         if !configuration.bar.widgets.contains(where: { $0.kind == .settings || $0.clickAction == .settings }) {
@@ -257,6 +248,10 @@ final class AppModel: ObservableObject {
         if let shortcuts = object["shortcuts"] as? [[String: Any]] {
             let supported = Set(ShortcutAction.allCases.map(\.rawValue))
             object["shortcuts"] = shortcuts.filter { supported.contains($0["action"] as? String ?? "") }
+        }
+        if var bar = object["bar"] as? [String: Any], let widgets = bar["widgets"] as? [[String: Any]] {
+            bar["widgets"] = widgets.filter { ($0["kind"] as? String) != "Dropdown" }
+            object["bar"] = bar
         }
         return try? JSONSerialization.data(withJSONObject: object)
     }

@@ -267,8 +267,14 @@ final class BarPanelController {
         @ObservedObject var model: AppModel
         @ObservedObject var context: PanelContext
         var body: some View {
-            BarView(model: model, notchWidth: context.notchWidth, topReservedHeight: context.topReservedHeight, interactionID: context.interactionID)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Keep the wallpaper crop inside the all-Spaces bar window as the
+            // transition-proof cover. Per-Space covers provide the correct
+            // desktop image underneath, while this surface prevents even one
+            // native menu-bar frame during an interactive Space gesture.
+            ZStack {
+                WallpaperMenuBarCover(path: context.wallpaperPath, screenSize: context.screenSize)
+                BarView(model: model, notchWidth: context.notchWidth, topReservedHeight: context.topReservedHeight, interactionID: context.interactionID)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -291,8 +297,10 @@ private final class WallpaperCropView: NSView {
     var path = ""
     var image: NSImage?
     var screenSize: CGSize = .zero
-    override var isOpaque: Bool { image != nil }
+    override var isOpaque: Bool { true }
     override func draw(_ dirtyRect: NSRect) {
+        NSColor.black.setFill()
+        dirtyRect.fill()
         guard let image, screenSize.width > 0, screenSize.height > 0, image.size.width > 0, image.size.height > 0 else { return }
         let scale = max(screenSize.width / image.size.width, screenSize.height / image.size.height)
         let drawn = CGSize(width: image.size.width * scale, height: image.size.height * scale)

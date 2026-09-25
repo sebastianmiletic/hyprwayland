@@ -69,10 +69,10 @@ enum WidgetPlacement: String, Codable, CaseIterable, Identifiable {
 }
 enum WidgetStyle: String, Codable, CaseIterable, Identifiable { case plain = "Plain", pill = "Filled pill", outlined = "Outlined pill"; var id: String { rawValue } }
 enum WidgetKind: String, Codable, CaseIterable, Identifiable {
-    case leftSidebar = "Left sidebar", wallpaper = "Wallpaper", activeApp = "Active app", workspaces = "Workspaces", clock = "Clock", wifi = "Wi-Fi", battery = "Battery", volume = "Volume", uptime = "Uptime", tray = "Dropdown", rightSidebar = "Right sidebar", settings = "Settings", customScript = "Shell widget", spacer = "Flexible space"
+    case leftSidebar = "Left sidebar", wallpaper = "Wallpaper", activeApp = "Active app", workspaces = "Workspaces", clock = "Clock", wifi = "Wi-Fi", battery = "Battery", volume = "Volume", uptime = "Uptime", rightSidebar = "Right sidebar", settings = "Settings", customScript = "Shell widget", spacer = "Flexible space"
     var id: String { rawValue }
     var defaultIcon: String {
-        switch self { case .leftSidebar: "sparkles"; case .wallpaper: "photo.on.rectangle.angled"; case .activeApp: "macwindow"; case .workspaces: "square.grid.3x1.fill"; case .clock: "clock"; case .wifi: "wifi"; case .battery: "battery.75percent"; case .volume: "speaker.wave.2"; case .uptime: "cpu"; case .tray: "chevron.down"; case .rightSidebar: "switch.2"; case .settings: "gearshape.fill"; case .customScript: "terminal"; case .spacer: "arrow.left.and.right" }
+        switch self { case .leftSidebar: "sparkles"; case .wallpaper: "photo.on.rectangle.angled"; case .activeApp: "macwindow"; case .workspaces: "square.grid.3x1.fill"; case .clock: "clock"; case .wifi: "wifi"; case .battery: "battery.75percent"; case .volume: "speaker.wave.2"; case .uptime: "cpu"; case .rightSidebar: "switch.2"; case .settings: "gearshape.fill"; case .customScript: "terminal"; case .spacer: "arrow.left.and.right" }
     }
 }
 enum WidgetClickAction: String, Codable, CaseIterable, Identifiable {
