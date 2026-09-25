@@ -47,6 +47,7 @@ final class AppModel: ObservableObject {
     @Published var rightSidebarDetail = ""
     @Published var selectedWiFiID = ""
     @Published var wifiPassword = ""
+    @Published var wifiSSID = ""
     @Published var statusPopoverWidgetID: UUID? = nil
     @Published var statusPopoverInteractionID: UUID? = nil
     @Published var statusPopoverDetail = ""

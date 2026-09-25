@@ -321,7 +321,16 @@ private struct WidgetView: View {
                 .popover(isPresented: popoverPresented, arrowEdge: model.configuration.bar.position.popoverEdge) { statusPopover }
         } else if widget.kind == .battery {
             Button { if actionEnabled { controls.setLowPowerMode(!controls.lowPowerMode) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
-                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel("Toggle Low Power Mode").help(controls.lowPowerMode ? "Turn Low Power Mode off" : "Turn Low Power Mode on")
+                .buttonStyle(SourcePressButtonStyle()).accessibilityLabel("Toggle Low Power Mode").help("Left-click toggles Low Power Mode. Right-click opens battery controls.")
+                .contextMenu {
+                    Button(controls.lowPowerMode ? "Turn Off Low Power Mode" : "Turn On Low Power Mode") { controls.setLowPowerMode(!controls.lowPowerMode) }
+                    if controls.supportsHighPowerMode {
+                        Button(controls.highPowerMode ? "Use Automatic Power Mode" : "Turn On High Power Mode") { controls.setHighPowerMode(!controls.highPowerMode) }
+                    }
+                    Divider()
+                    Button("Battery Details") { showStatusPopover(for: .battery) }
+                }
+                .popover(isPresented: popoverPresented, arrowEdge: model.configuration.bar.position.popoverEdge) { statusPopover }
         } else if [.wifi, .volume].contains(widget.kind) {
             Button { if actionEnabled { showStatusPopover(for: widget.kind) } } label: { content.modifier(WidgetChrome(widget: widget, palette: palette)) }
                 .buttonStyle(SourcePressButtonStyle()).accessibilityLabel(widget.name).help(widget.name)
@@ -454,6 +463,14 @@ private struct WidgetView: View {
                 .frame(width: 25, height: 24)
         }
         .buttonStyle(SourcePressButtonStyle()).help("Battery")
+        .contextMenu {
+            Button(controls.lowPowerMode ? "Turn Off Low Power Mode" : "Turn On Low Power Mode") { controls.setLowPowerMode(!controls.lowPowerMode) }
+            if controls.supportsHighPowerMode {
+                Button(controls.highPowerMode ? "Use Automatic Power Mode" : "Turn On High Power Mode") { controls.setHighPowerMode(!controls.highPowerMode) }
+            }
+            Divider()
+            Button("Battery Details") { showStatusPopover(for: .battery) }
+        }
     }
     private func detailButton(_ icon: String, detail: String, color: Color? = nil) -> some View {
         Button {
@@ -787,8 +804,22 @@ private struct StatusQuickPopover: View {
                 Toggle("Wi-Fi", isOn: Binding(get: { controls.wifiEnabled }, set: controls.setWiFiEnabled)).toggleStyle(.switch).tint(Color(hex: palette.accent))
                 Spacer(); Button { controls.requestWiFiAccessAndScan() } label: { if controls.scanningWiFi { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.clockwise") } }.buttonStyle(.plain)
             }
+            HStack {
+                if controls.connectedSSID != "Not connected" { Button("Disconnect") { controls.disconnectWiFi() }.buttonStyle(QuickPopoverButtonStyle(palette: palette)) }
+                Spacer()
+                Button("Other Network…") { model.selectedWiFiID = model.selectedWiFiID == "__other__" ? "" : "__other__" }.buttonStyle(QuickPopoverButtonStyle(palette: palette))
+            }
+            if model.selectedWiFiID == "__other__" {
+                VStack(spacing: 7) {
+                    TextField("Network name", text: $model.wifiSSID).textFieldStyle(.plain)
+                    SecureField("Password (if required)", text: $model.wifiPassword).textFieldStyle(.plain)
+                    Button("Join Network") { controls.connectHiddenNetwork(ssid: model.wifiSSID, password: model.wifiPassword) }
+                        .buttonStyle(QuickPopoverButtonStyle(palette: palette))
+                        .disabled(model.wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }.padding(9).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 10))
+            }
             if controls.wifiNetworks.isEmpty && !controls.scanningWiFi {
-                Button("Allow Wi-Fi network listing…") { if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") { NSWorkspace.shared.open(url) } }.buttonStyle(QuickPopoverButtonStyle(palette: palette))
+                Button("Review Location Access…") { WorkspaceController.openPrivacyPane("Privacy_LocationServices") }.buttonStyle(QuickPopoverButtonStyle(palette: palette))
             }
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 6) {
@@ -798,7 +829,14 @@ private struct StatusQuickPopover: View {
                                 model.selectedWiFiID = network.id; model.wifiPassword = ""
                                 if !network.secure || network.known { controls.connect(to: network) }
                             } label: {
-                                HStack { Image(systemName: "wifi"); Text(network.ssid).lineLimit(1); Spacer(); if network.known { Image(systemName: "checkmark.seal.fill").font(.caption).foregroundStyle(Color(hex: palette.success)) } else if network.secure { Image(systemName: "lock.fill").font(.caption) } }
+                                HStack {
+                                    Image(systemName: network.signal > -55 ? "wifi" : network.signal > -72 ? "wifi" : "wifi.exclamationmark")
+                                    Text(network.ssid).lineLimit(1)
+                                    Spacer()
+                                    if network.ssid == controls.connectedSSID { Image(systemName: "checkmark").foregroundStyle(Color(hex: palette.success)) }
+                                    else if network.known { Image(systemName: "checkmark.seal.fill").font(.caption).foregroundStyle(Color(hex: palette.success)) }
+                                    else if network.secure { Image(systemName: "lock.fill").font(.caption) }
+                                }
                                     .padding(.horizontal, 10).frame(height: 34).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }.buttonStyle(SourcePressButtonStyle())
                             if model.selectedWiFiID == network.id && network.secure && !network.known {
@@ -834,7 +872,10 @@ private struct StatusQuickPopover: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack { BatteryGaugeIcon(level: controls.batteryLevel, charging: controls.batteryCharging, color: iconColor, background: Color(hex: palette.background)).scaleEffect(1.35); Text(controls.batteryPercent).font(.title2.weight(.semibold)).monospacedDigit(); Spacer() }
             Toggle("Low Power Mode", isOn: Binding(get: { controls.lowPowerMode }, set: controls.setLowPowerMode)).toggleStyle(.switch).tint(Color(hex: palette.accent))
-            Button("Open Battery Settings") { model.openSystemSettings("Battery-Settings.extension") }.buttonStyle(QuickPopoverButtonStyle(palette: palette))
+            if controls.supportsHighPowerMode {
+                Toggle("High Power Mode", isOn: Binding(get: { controls.highPowerMode }, set: controls.setHighPowerMode)).toggleStyle(.switch).tint(Color(hex: palette.accent))
+            }
+            Text("Power changes never open System Settings or request a password.").font(.caption2).foregroundStyle(Color(hex: palette.muted))
         }
     }
 }

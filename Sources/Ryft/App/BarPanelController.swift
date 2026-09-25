@@ -28,6 +28,7 @@ final class BarPanelController {
     }
 
     private let model: AppModel
+    private let spaceCoverManager = SpaceMenuBarCoverManager()
     private var entries: [PanelEntry] = []
     private var cancellables = Set<AnyCancellable>()
     private var coversWaitingForWallpaper = Set<ObjectIdentifier>()
@@ -42,7 +43,10 @@ final class BarPanelController {
         NotificationCenter.default.publisher(for: .ryftWallpaperChanged)
             .sink { [weak self] _ in self?.synchronize(self?.model.configuration.bar) }.store(in: &cancellables)
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
-            .sink { [weak self] _ in self?.prepareCoversForSpaceChange() }.store(in: &cancellables)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.spaceCoverManager.synchronize(config: self.model.configuration.bar, screens: NSScreen.screens)
+            }.store(in: &cancellables)
         Timer.publish(every: 1, on: .main, in: .common).autoconnect()
             .sink { [weak self] _ in self?.refreshWallpaperPaths() }.store(in: &cancellables)
         synchronize(model.configuration.bar)
@@ -57,6 +61,7 @@ final class BarPanelController {
         }
 
         let desiredScreens = config.showOnAllDisplays ? NSScreen.screens : [NSScreen.main].compactMap { $0 }
+        spaceCoverManager.synchronize(config: config, screens: desiredScreens)
         let desiredIDs = Set(desiredScreens.compactMap(screenID))
 
         for entry in entries where !desiredIDs.contains(entry.screenID) { entry.panel.orderOut(nil); entry.cornerPanels.forEach { $0.orderOut(nil) }; entry.menuBarCoverPanel.orderOut(nil) }
@@ -136,22 +141,9 @@ final class BarPanelController {
     }
 
     private func updateMenuBarCover(_ panel: NSPanel, on screen: NSScreen, config: BarConfiguration) {
-        guard config.enabled else { panel.orderOut(nil); return }
-        // During a Space transition keep the existing opaque cover visible.
-        // Ordering it out, even briefly, exposes the native macOS menu bar.
-        // The panel travels with the active Space and its crop is replaced as
-        // soon as NSWorkspace publishes the destination wallpaper.
-        guard !coversWaitingForWallpaper.contains(ObjectIdentifier(panel)) else {
-            panel.orderFrontRegardless()
-            return
-        }
-        // Cover the native menu-bar row for every Ryft edge, including behind
-        // a floating top bar. The cover remains one level below Ryft itself.
-        // One-pixel overlap removes the hairline that can appear where the
-        // synthetic crop meets the native desktop wallpaper at fractional scale.
-        let height = ceil(DisplayLayoutMetrics.menuBarHeight(for: screen)) + 1
-        panel.setFrame(NSRect(x: screen.frame.minX, y: screen.frame.maxY - height, width: screen.frame.width, height: height), display: true)
-        panel.orderFrontRegardless()
+        // Per-Space covers are owned by SpaceMenuBarCoverManager. Retain this
+        // legacy panel only to avoid rebuilding long-lived bar entries.
+        panel.orderOut(nil)
     }
 
     private func prepareCoversForSpaceChange() {
@@ -311,6 +303,131 @@ private final class WallpaperCropView: NSView {
             height: drawn.height
         )
         image.draw(in: destination, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
+    }
+}
+
+private final class SpaceMenuBarCoverManager {
+    private struct SpaceInfo { let id: UInt64; let uuid: String; let display: String }
+    private struct Key: Hashable { let space: UInt64; let display: String }
+    private struct Cover { let panel: NSPanel; let view: WallpaperCropView }
+    private typealias MainConnection = @convention(c) () -> UInt32
+    private typealias CopySpaces = @convention(c) (UInt32) -> Unmanaged<CFArray>?
+    private typealias AddWindows = @convention(c) (UInt32, CFArray, CFArray) -> Void
+
+    private let library: UnsafeMutableRawPointer?
+    private let mainConnection: MainConnection?
+    private let copySpaces: CopySpaces?
+    private let addWindows: AddWindows?
+    private var covers: [Key: Cover] = [:]
+
+    init() {
+        library = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY)
+        if let library, let symbol = dlsym(library, "CGSMainConnectionID") { mainConnection = unsafeBitCast(symbol, to: MainConnection.self) } else { mainConnection = nil }
+        if let library, let symbol = dlsym(library, "CGSCopyManagedDisplaySpaces") { copySpaces = unsafeBitCast(symbol, to: CopySpaces.self) } else { copySpaces = nil }
+        if let library, let symbol = dlsym(library, "SLSAddWindowsToSpaces") { addWindows = unsafeBitCast(symbol, to: AddWindows.self) } else { addWindows = nil }
+    }
+
+    deinit {
+        covers.values.forEach { $0.panel.orderOut(nil) }
+        if let library { dlclose(library) }
+    }
+
+    func synchronize(config: BarConfiguration, screens: [NSScreen]) {
+        guard config.enabled, let mainConnection, let copySpaces, let addWindows,
+              let displays = copySpaces(mainConnection())?.takeRetainedValue() as? [[String: Any]] else {
+            covers.values.forEach { $0.panel.orderOut(nil) }
+            return
+        }
+        let screenByDisplay = Dictionary(uniqueKeysWithValues: screens.compactMap { screen -> (String, NSScreen)? in
+            guard let identifier = displayIdentifier(for: screen) else { return nil }
+            return (identifier, screen)
+        })
+        var desired = Set<Key>()
+        let connection = mainConnection()
+        for display in displays {
+            let fallbackDisplay = display["Display Identifier"] as? String
+            guard let spaces = display["Spaces"] as? [[String: Any]] else { continue }
+            for value in spaces where (value["type"] as? NSNumber)?.intValue == 0 {
+                guard let id = (value["ManagedSpaceID"] as? NSNumber)?.uint64Value,
+                      let uuid = value["uuid"] as? String,
+                      let displayID = (value["Display Identifier"] as? String) ?? fallbackDisplay,
+                      let screen = screenByDisplay[displayID] else { continue }
+                let info = SpaceInfo(id: id, uuid: uuid, display: displayID)
+                let key = Key(space: id, display: displayID)
+                desired.insert(key)
+                let path = wallpaperPath(space: info.uuid, display: displayID)
+                    ?? NSWorkspace.shared.desktopImageURL(for: screen)?.path
+                    ?? ""
+                if let cover = covers[key] { update(cover, screen: screen, path: path) }
+                else {
+                    let cover = makeCover(screen: screen, path: path)
+                    covers[key] = cover
+                    cover.panel.orderFrontRegardless()
+                    addWindows(connection, [NSNumber(value: cover.panel.windowNumber)] as CFArray, [NSNumber(value: id)] as CFArray)
+                }
+            }
+        }
+        let stale = covers.keys.filter { !desired.contains($0) }
+        for key in stale { covers[key]?.panel.orderOut(nil); covers.removeValue(forKey: key) }
+    }
+
+    private func makeCover(screen: NSScreen, path: String) -> Cover {
+        let height = ceil(DisplayLayoutMetrics.menuBarHeight(for: screen)) + 1
+        let frame = NSRect(x: screen.frame.minX, y: screen.frame.maxY - height, width: screen.frame.width, height: height)
+        let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
+        panel.backgroundColor = .black; panel.isOpaque = true; panel.hasShadow = false
+        panel.hidesOnDeactivate = false; panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
+        let view = WallpaperCropView(frame: NSRect(origin: .zero, size: frame.size))
+        panel.contentView = view
+        let cover = Cover(panel: panel, view: view)
+        update(cover, screen: screen, path: path)
+        return cover
+    }
+
+    private func update(_ cover: Cover, screen: NSScreen, path: String) {
+        let height = ceil(DisplayLayoutMetrics.menuBarHeight(for: screen)) + 1
+        let frame = NSRect(x: screen.frame.minX, y: screen.frame.maxY - height, width: screen.frame.width, height: height)
+        if !cover.panel.frame.equalTo(frame) { cover.panel.setFrame(frame, display: true) }
+        cover.view.screenSize = screen.frame.size
+        if cover.view.path != path {
+            cover.view.path = path
+            cover.view.image = NSImage(contentsOfFile: path)
+        }
+        cover.view.needsDisplay = true
+    }
+
+    private func wallpaperPath(space: String, display: String) -> String? {
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
+        guard let data = try? Data(contentsOf: url),
+              let root = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let spaces = root["Spaces"] as? [String: Any],
+              let value = spaces[space] as? [String: Any] else { return nil }
+        let displayValue = ((value["Displays"] as? [String: Any])?[display] as? [String: Any]) ?? (value["Default"] as? [String: Any])
+        guard let desktop = displayValue?["Desktop"] as? [String: Any],
+              let content = desktop["Content"] as? [String: Any],
+              let choices = content["Choices"] as? [[String: Any]],
+              let configuration = choices.first?["Configuration"] as? Data,
+              let decoded = try? PropertyListSerialization.propertyList(from: configuration, format: nil) else { return nil }
+        return findFileURL(in: decoded)?.path
+    }
+
+    private func findFileURL(in value: Any) -> URL? {
+        if let dictionary = value as? [String: Any] {
+            if let relative = (dictionary["url"] as? [String: Any])?["relative"] as? String,
+               let url = URL(string: relative), url.isFileURL { return url }
+            for child in dictionary.values { if let result = findFileURL(in: child) { return result } }
+        } else if let array = value as? [Any] {
+            for child in array { if let result = findFileURL(in: child) { return result } }
+        }
+        return nil
+    }
+
+    private func displayIdentifier(for screen: NSScreen) -> String? {
+        guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
+              let uuid = CGDisplayCreateUUIDFromDisplayID(CGDirectDisplayID(number.uint32Value))?.takeRetainedValue() else { return nil }
+        return CFUUIDCreateString(nil, uuid) as String
     }
 }
 

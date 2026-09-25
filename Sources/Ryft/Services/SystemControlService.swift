@@ -29,6 +29,8 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
     @Published var defaultAudioDevice: AudioDeviceID = 0
     @Published var outputVolume: Double = 50
     @Published var lowPowerMode = false
+    @Published var highPowerMode = false
+    @Published private(set) var supportsHighPowerMode = false
     @Published var batteryPercent = "--"
     @Published var batteryLevel = -1
     @Published var batteryCharging = false
@@ -48,6 +50,7 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
 
     override init() {
         super.init()
+        refreshPowerCapabilities()
         refreshAll()
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { [weak self] _ in self?.refreshOutputLevel() }
         powerTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshPowerState() }
@@ -148,7 +151,22 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         }
     }
 
-    func disconnectWiFi() { CWWiFiClient.shared().interface()?.disassociate(); refreshWiFiState() }
+    func connectHiddenNetwork(ssid: String, password: String) {
+        let ssid = ssid.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ssid.isEmpty, let interface = CWWiFiClient.shared().interface() else { operationMessage = "Enter a network name."; return }
+        operationMessage = "Finding \(ssid)…"
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                guard let network = try interface.scanForNetworks(withName: ssid).max(by: { $0.rssiValue < $1.rssiValue }) else {
+                    DispatchQueue.main.async { self.operationMessage = "Network not found." }; return
+                }
+                try interface.associate(to: network, password: password.isEmpty ? nil : password)
+                DispatchQueue.main.async { self.operationMessage = "Connected to \(ssid)"; self.refreshWiFiState(); self.scanWiFi() }
+            } catch { DispatchQueue.main.async { self.operationMessage = "Could not join: \(error.localizedDescription)" } }
+        }
+    }
+
+    func disconnectWiFi() { CWWiFiClient.shared().interface()?.disassociate(); refreshWiFiState(); operationMessage = "Disconnected" }
 
     func refreshAudioDevices() {
         var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
@@ -229,19 +247,39 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
 
     func setLowPowerMode(_ enabled: Bool) {
         guard enabled != lowPowerMode else { return }
-        guard AXIsProcessTrusted() else {
-            operationMessage = "Accessibility is needed to change Low Power Mode without a password."
-            WorkspaceController.requestAccessibility()
-            return
-        }
         operationMessage = enabled ? "Enabling Low Power Mode…" : "Disabling Low Power Mode…"
-        if let pane = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension"),
-           let settings = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.systempreferences") {
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = false; configuration.addsToRecentItems = false
-            NSWorkspace.shared.open([pane], withApplicationAt: settings, configuration: configuration)
+        runPasswordlessPowerCommand(["-b", "lowpowermode", enabled ? "1" : "0"]) { [weak self] success in
+            guard let self else { return }
+            self.refreshPowerState()
+            self.operationMessage = success && self.lowPowerMode == enabled
+                ? (enabled ? "Low Power Mode enabled" : "Low Power Mode disabled")
+                : "macOS denied the passwordless power change. Ryft did not open Settings or request authentication."
         }
-        setLowPowerModeThroughSystemSettings(enabled, retries: 12)
+    }
+
+    func setHighPowerMode(_ enabled: Bool) {
+        guard supportsHighPowerMode else { return }
+        operationMessage = enabled ? "Enabling High Power Mode…" : "Returning to Automatic…"
+        runPasswordlessPowerCommand(["-a", "highpowermode", enabled ? "1" : "0"]) { [weak self] success in
+            guard let self else { return }
+            self.highPowerMode = success && enabled
+            self.operationMessage = success ? (enabled ? "High Power Mode enabled" : "Automatic power mode enabled") : "macOS denied the passwordless power change."
+        }
+    }
+
+    private func refreshPowerCapabilities() {
+        let task = Process(); let pipe = Pipe()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset"); task.arguments = ["-g", "custom"]; task.standardOutput = pipe; task.standardError = FileHandle.nullDevice
+        do { try task.run(); task.waitUntilExit(); let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""; supportsHighPowerMode = output.contains("highpowermode"); highPowerMode = output.range(of: #"highpowermode\s+1"#, options: .regularExpression) != nil } catch { }
+    }
+
+    private func runPasswordlessPowerCommand(_ arguments: [String], completion: @escaping (Bool) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let task = Process(); task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset"); task.arguments = arguments
+            task.standardOutput = FileHandle.nullDevice; task.standardError = FileHandle.nullDevice
+            do { try task.run(); task.waitUntilExit(); DispatchQueue.main.async { completion(task.terminationStatus == 0) } }
+            catch { DispatchQueue.main.async { completion(false) } }
+        }
     }
 
     private func setLowPowerModeThroughSystemSettings(_ enabled: Bool, retries: Int) {
