@@ -526,9 +526,11 @@ final class AppModel: ObservableObject {
         let target = pane.isEmpty ? "x-apple.systempreferences:" : "x-apple.systempreferences:com.apple.\(pane)"
         if let url = URL(string: target) { NSWorkspace.shared.open(url) }
     }
-    func addTodo() {
+    func addTodo(on date: Date = Date()) {
         let value = todoDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }; configuration.todos.append(value); todoDraft = ""
+        guard !value.isEmpty else { return }
+        configuration.todos.append(TodoConfiguration(title: value, date: date))
+        todoDraft = ""
     }
     func runTool(mode: Int) {
         let query = toolQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""

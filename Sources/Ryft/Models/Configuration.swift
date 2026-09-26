@@ -293,6 +293,29 @@ struct ShortcutConfiguration: Codable, Equatable, Identifiable {
     var display: String { (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "") + key.uppercased() }
 }
 
+struct TodoConfiguration: Codable, Equatable, Identifiable {
+    var id: UUID
+    var title: String
+    var date: Date
+
+    init(id: UUID = UUID(), title: String, date: Date) {
+        self.id = id; self.title = title; self.date = Calendar.current.startOfDay(for: date)
+    }
+    init(from decoder: Decoder) throws {
+        if let legacy = try? decoder.singleValueContainer().decode(String.self) {
+            self.init(title: legacy, date: Date())
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID(),
+            title: try c.decode(String.self, forKey: .title),
+            date: try c.decodeIfPresent(Date.self, forKey: .date) ?? Date()
+        )
+    }
+    enum CodingKeys: String, CodingKey { case id, title, date }
+}
+
 struct RyftConfiguration: Codable, Equatable {
     var bar = BarConfiguration()
     var shortcuts = [ShortcutConfiguration(action: .openFinder, key: "e", option: false, command: true), ShortcutConfiguration(action: .quitFrontmost, key: "q", option: false, command: true)]
@@ -301,7 +324,7 @@ struct RyftConfiguration: Codable, Equatable {
     var favoriteWallpapers: [String] = []
     var currentWallpaper: String = ""
     var adaptColorsToWallpaper = true
-    var todos: [String] = []
+    var todos: [TodoConfiguration] = []
     var savedBars: [NamedBarProfile] = []
     var sourcePresetVersion = 17
     var launchAtLogin = false
@@ -323,7 +346,7 @@ struct RyftConfiguration: Codable, Equatable {
         favoriteWallpapers = try c.decodeIfPresent([String].self, forKey: .favoriteWallpapers) ?? []
         currentWallpaper = try c.decodeIfPresent(String.self, forKey: .currentWallpaper) ?? ""
         adaptColorsToWallpaper = try c.decodeIfPresent(Bool.self, forKey: .adaptColorsToWallpaper) ?? true
-        todos = try c.decodeIfPresent([String].self, forKey: .todos) ?? []
+        todos = try c.decodeIfPresent([TodoConfiguration].self, forKey: .todos) ?? []
         savedBars = try c.decodeIfPresent([NamedBarProfile].self, forKey: .savedBars) ?? []
         sourcePresetVersion = try c.decodeIfPresent(Int.self, forKey: .sourcePresetVersion) ?? 0
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false

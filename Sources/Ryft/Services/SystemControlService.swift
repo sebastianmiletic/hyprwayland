@@ -296,9 +296,15 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         runPasswordlessPowerCommand(["-b", "lowpowermode", enabled ? "1" : "0"]) { [weak self] success in
             guard let self else { return }
             self.refreshPowerState()
-            self.operationMessage = success && self.lowPowerMode == enabled
-                ? (enabled ? "Low Power Mode enabled" : "Low Power Mode disabled")
-                : "macOS denied the passwordless power change. Ryft did not open Settings or request authentication."
+            if success && self.lowPowerMode == enabled {
+                self.operationMessage = enabled ? "Low Power Mode enabled" : "Normal power mode enabled"
+            } else {
+                // pmset is root-only on standard macOS. Fall back to pressing
+                // Apple's own battery control through Accessibility; this uses
+                // Control Center's existing privilege without a password or a
+                // System Settings window.
+                self.setLowPowerModeThroughBatteryMenu(enabled)
+            }
         }
     }
 
@@ -308,7 +314,8 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         runPasswordlessPowerCommand(["-a", "highpowermode", enabled ? "1" : "0"]) { [weak self] success in
             guard let self else { return }
             self.highPowerMode = success && enabled
-            self.operationMessage = success ? (enabled ? "High Power Mode enabled" : "Automatic power mode enabled") : "macOS denied the passwordless power change."
+            if success { self.operationMessage = enabled ? "High Power Mode enabled" : "Automatic power mode enabled" }
+            else { self.setHighPowerModeThroughBatteryMenu(enabled) }
         }
     }
 
@@ -327,58 +334,92 @@ final class SystemControlService: NSObject, ObservableObject, CLLocationManagerD
         }
     }
 
-    private func setLowPowerModeThroughSystemSettings(_ enabled: Bool, retries: Int) {
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences").first else {
-            retryLowPowerMode(enabled, retries: retries); return
+    private func setHighPowerModeThroughBatteryMenu(_ enabled: Bool) {
+        guard AXIsProcessTrusted() else { operationMessage = "Accessibility is required to change power mode from Ryft."; return }
+        let apps = NSWorkspace.shared.runningApplications.filter { $0.bundleIdentifier == "com.apple.controlcenter" || $0.bundleIdentifier == "com.apple.systemuiserver" }
+        let roots = apps.map { AXUIElementCreateApplication($0.processIdentifier) }
+        let batteryItem = roots.flatMap { accessibilityDescendants(of: $0) }.first { element in
+            let role: String = axAttribute(element, kAXRoleAttribute as CFString) ?? ""
+            return role == (kAXMenuBarItemRole as String) && axText(element).contains("battery")
         }
-        let root = AXUIElementCreateApplication(app.processIdentifier)
-        let elements = accessibilityDescendants(of: root)
-        let popup = elements.first { element in
-            let role: String? = axAttribute(element, kAXRoleAttribute as CFString)
-            guard role == (kAXPopUpButtonRole as String) || role == "AXMenuButton" else { return false }
-            let value: String = axAttribute(element, kAXValueAttribute as CFString) ?? ""
-            let title: String = axAttribute(element, kAXTitleAttribute as CFString) ?? ""
-            let description: String = axAttribute(element, kAXDescriptionAttribute as CFString) ?? ""
-            let combined = "\(value) \(title) \(description)".lowercased()
-            return combined.contains("low power") || combined == "never  " || combined.contains("only on battery") || combined == "always  "
-        }
-        guard let popup else { retryLowPowerMode(enabled, retries: retries); return }
+        guard let batteryItem, AXUIElementPerformAction(batteryItem, kAXPressAction as CFString) == .success else { operationMessage = "Apple's battery control is unavailable."; return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.chooseHighPowerMode(enabled, roots: roots, attempt: 0) }
+    }
 
-        guard AXUIElementPerformAction(popup, kAXPressAction as CFString) == .success else {
-            retryLowPowerMode(enabled, retries: retries); return
+    private func chooseHighPowerMode(_ enabled: Bool, roots: [AXUIElement], attempt: Int) {
+        refreshPowerCapabilities()
+        if highPowerMode == enabled { operationMessage = enabled ? "High Power Mode enabled" : "Automatic power mode enabled"; return }
+        let elements = roots.flatMap { accessibilityDescendants(of: $0) }
+        let terms = enabled ? ["high power"] : ["automatic", "normal"]
+        let choice = elements.first { element in
+            let role: String = axAttribute(element, kAXRoleAttribute as CFString) ?? ""
+            return (role == (kAXMenuItemRole as String) || role == (kAXButtonRole as String) || role == (kAXPopUpButtonRole as String)) && terms.contains(where: { axText(element).contains($0) })
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-            guard let self else { return }
-            let menuItems = self.accessibilityDescendants(of: root)
-            let desired = menuItems.first { element in
-                let role: String? = self.axAttribute(element, kAXRoleAttribute as CFString)
-                let title: String = self.axAttribute(element, kAXTitleAttribute as CFString) ?? ""
-                guard role == (kAXMenuItemRole as String) else { return false }
-                return enabled ? title.localizedCaseInsensitiveContains("Always") : title.localizedCaseInsensitiveContains("Never")
-            }
-            if let desired, AXUIElementPerformAction(desired, kAXPressAction as CFString) == .success {
-                app.hide()
-                self.finishLowPowerModeChange(enabled)
-            }
-            else { self.retryLowPowerMode(enabled, retries: retries) }
+        if let choice { _ = AXUIElementPerformAction(choice, kAXPressAction as CFString) }
+        guard attempt < 5 else { operationMessage = "macOS did not expose an actionable High Power Mode control."; return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.chooseHighPowerMode(enabled, roots: roots, attempt: attempt + 1) }
+    }
+
+    private func setLowPowerModeThroughBatteryMenu(_ enabled: Bool) {
+        guard AXIsProcessTrusted() else {
+            operationMessage = "Accessibility is required to change power mode from Ryft."
+            return
+        }
+        let apps = NSWorkspace.shared.runningApplications.filter {
+            $0.bundleIdentifier == "com.apple.controlcenter" || $0.bundleIdentifier == "com.apple.systemuiserver"
+        }
+        let roots = apps.map { AXUIElementCreateApplication($0.processIdentifier) }
+        let allElements = roots.flatMap { accessibilityDescendants(of: $0) }
+        let batteryItem = allElements.first { element in
+            let role: String = axAttribute(element, kAXRoleAttribute as CFString) ?? ""
+            guard role == (kAXMenuBarItemRole as String) else { return false }
+            return axText(element).contains("battery")
+        }
+        guard let batteryItem, AXUIElementPerformAction(batteryItem, kAXPressAction as CFString) == .success else {
+            operationMessage = "Apple's battery control is unavailable."
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.chooseLowPowerMode(enabled, roots: roots, attempt: 0)
         }
     }
 
-    private func retryLowPowerMode(_ enabled: Bool, retries: Int) {
-        guard retries > 0 else {
-            operationMessage = "Battery Settings is open. Choose Low Power Mode there; Ryft will never request your password."
-            refreshPowerState(); return
+    private func chooseLowPowerMode(_ enabled: Bool, roots: [AXUIElement], attempt: Int) {
+        refreshPowerState()
+        if lowPowerMode == enabled {
+            operationMessage = enabled ? "Low Power Mode enabled" : "Normal power mode enabled"
+            return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.setLowPowerModeThroughSystemSettings(enabled, retries: retries - 1) }
+        let elements = roots.flatMap { accessibilityDescendants(of: $0) }
+        let actionable = elements.filter { element in
+            let role: String = axAttribute(element, kAXRoleAttribute as CFString) ?? ""
+            return role == (kAXMenuItemRole as String) || role == (kAXCheckBoxRole as String) || role == (kAXButtonRole as String) || role == (kAXPopUpButtonRole as String)
+        }
+        if attempt == 0, let lowPower = actionable.first(where: { axText($0).contains("low power mode") }) {
+            _ = AXUIElementPerformAction(lowPower, kAXPressAction as CFString)
+        } else {
+            let terms = enabled ? ["always"] : ["never", "normal", "automatic", "off"]
+            if let choice = actionable.first(where: { item in terms.contains(where: { axText(item).contains($0) }) }) {
+                _ = AXUIElementPerformAction(choice, kAXPressAction as CFString)
+            }
+        }
+        guard attempt < 5 else {
+            refreshPowerState()
+            operationMessage = lowPowerMode == enabled
+                ? (enabled ? "Low Power Mode enabled" : "Normal power mode enabled")
+                : "macOS did not expose an actionable battery power-mode control."
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.chooseLowPowerMode(enabled, roots: roots, attempt: attempt + 1)
+        }
     }
 
-    private func finishLowPowerModeChange(_ enabled: Bool) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-            guard let self else { return }
-            self.refreshPowerState()
-            if self.lowPowerMode == enabled { self.operationMessage = enabled ? "Low Power Mode enabled without authentication" : "Low Power Mode disabled without authentication" }
-            else { self.operationMessage = "Battery Settings is open. Choose Low Power Mode there; Ryft will never request your password." }
-        }
+    private func axText(_ element: AXUIElement) -> String {
+        let title: String = axAttribute(element, kAXTitleAttribute as CFString) ?? ""
+        let description: String = axAttribute(element, kAXDescriptionAttribute as CFString) ?? ""
+        let value: String = axAttribute(element, kAXValueAttribute as CFString) ?? ""
+        return "\(title) \(description) \(value)".lowercased()
     }
 
     private func accessibilityDescendants(of root: AXUIElement, limit: Int = 1200) -> [AXUIElement] {

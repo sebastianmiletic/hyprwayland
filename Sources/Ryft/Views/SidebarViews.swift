@@ -272,7 +272,7 @@ struct RightSidebarView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Tasks").font(.headline)
             ForEach(Array(model.configuration.todos.enumerated()), id: \.offset) { index, todo in
-                HStack { Image(systemName: "circle"); Text(todo); Spacer(); Button { model.configuration.todos.remove(at: index) } label: { Image(systemName: "checkmark") }.buttonStyle(.plain) }
+                HStack { Image(systemName: "circle"); VStack(alignment: .leading) { Text(todo.title); Text(todo.date.formatted(date: .abbreviated, time: .omitted)).font(.caption2).foregroundStyle(.secondary) }; Spacer(); Button { model.configuration.todos.remove(at: index) } label: { Image(systemName: "checkmark") }.buttonStyle(.plain) }
             }
             HStack { TextField("Add a task", text: $model.todoDraft).textFieldStyle(.plain).onSubmit { model.addTodo() }; Button { model.addTodo() } label: { Image(systemName: "plus.circle.fill") }.buttonStyle(.plain) }
                 .padding(10).background(Color(hex: palette.background)).clipShape(RoundedRectangle(cornerRadius: 12))

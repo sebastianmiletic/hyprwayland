@@ -494,6 +494,7 @@ private struct WidgetView: View {
 private final class CalendarPopoverState: ObservableObject {
     @Published var visibleMonth = Date()
     @Published var selectedDate = Date()
+    @Published var showAllTasks = false
 }
 
 private struct CalendarTodoPopover: View {
@@ -513,6 +514,9 @@ private struct CalendarTodoPopover: View {
         let symbols = calendar.veryShortStandaloneWeekdaySymbols
         let split = calendar.firstWeekday - 1
         return Array(symbols[split...] + symbols[..<split])
+    }
+    private var visibleTodos: [(offset: Int, element: TodoConfiguration)] {
+        Array(model.configuration.todos.enumerated()).filter { state.showAllTasks || calendar.isDate($0.element.date, inSameDayAs: state.selectedDate) }
     }
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -541,13 +545,29 @@ private struct CalendarTodoPopover: View {
             }.padding(16).frame(width: 295)
             Rectangle().fill(Color(hex: palette.muted).opacity(0.22)).frame(width: 1).padding(.vertical, 12)
             VStack(alignment: .leading, spacing: 10) {
-                HStack { VStack(alignment: .leading, spacing: 2) { Text("TASKS").font(.caption2.weight(.bold)).tracking(1.2).foregroundStyle(Color(hex: palette.muted)); Text(state.selectedDate.formatted(date: .abbreviated, time: .omitted)).font(.headline) }; Spacer(); Text("\(model.configuration.todos.count)").font(.caption.monospacedDigit()).padding(6).background(Color(hex: palette.surface)).clipShape(Circle()) }
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("TASKS").font(.caption2.weight(.bold)).tracking(1.2).foregroundStyle(Color(hex: palette.muted))
+                        Text(state.showAllTasks ? "All tasks" : state.selectedDate.formatted(date: .abbreviated, time: .omitted)).font(.headline)
+                    }
+                    Spacer()
+                    Button(state.showAllTasks ? "Selected day" : "All tasks") { state.showAllTasks.toggle() }
+                        .buttonStyle(QuickPopoverButtonStyle(palette: palette))
+                    Text("\(visibleTodos.count)").font(.caption.monospacedDigit()).padding(6).background(Color(hex: palette.surface)).clipShape(Circle())
+                }
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 6) {
-                        ForEach(Array(model.configuration.todos.enumerated()), id: \.offset) { index, todo in
+                        if visibleTodos.isEmpty {
+                            Text(state.showAllTasks ? "No tasks yet" : "No tasks for this day").font(.caption).foregroundStyle(Color(hex: palette.muted)).frame(maxWidth: .infinity).padding(.vertical, 24)
+                        }
+                        ForEach(visibleTodos, id: \.element.id) { index, todo in
                             HStack(spacing: 8) {
                                 Button { removeTodo(index) } label: { Image(systemName: "circle").foregroundStyle(Color(hex: palette.accent)) }.buttonStyle(SourcePressButtonStyle())
-                                Text(todo).font(.caption).lineLimit(2); Spacer()
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(todo.title).font(.caption).lineLimit(2)
+                                    if state.showAllTasks { Text(todo.date.formatted(date: .abbreviated, time: .omitted)).font(.caption2).foregroundStyle(Color(hex: palette.muted)) }
+                                }
+                                Spacer()
                             }.padding(9).background(Color(hex: palette.surface)).clipShape(RoundedRectangle(cornerRadius: 10))
                                 .transition(.scale(scale: 0.94).combined(with: .opacity))
                         }
@@ -565,7 +585,7 @@ private struct CalendarTodoPopover: View {
         .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.16), value: model.configuration.todos)
     }
     private func moveMonth(_ amount: Int) { if let date = calendar.date(byAdding: .month, value: amount, to: state.visibleMonth) { state.visibleMonth = date } }
-    private func addTodo() { withAnimation(.easeOut(duration: 0.16)) { model.addTodo() } }
+    private func addTodo() { withAnimation(.easeOut(duration: 0.16)) { model.addTodo(on: state.selectedDate) } }
     private func removeTodo(_ index: Int) { withAnimation(.easeOut(duration: 0.14)) { guard model.configuration.todos.indices.contains(index) else { return }; model.configuration.todos.remove(at: index) } }
 }
 
